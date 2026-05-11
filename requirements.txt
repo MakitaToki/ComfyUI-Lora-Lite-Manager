@@ -1,0 +1,2 @@
+# LoRA Lite Manager uses aiohttp from ComfyUI's runtime.
+# Keep this file intentionally empty until optional dependencies are added.

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LoRA Lite Manager</title>
+    <link rel="stylesheet" href="/lora-lite-static/styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <h1>LoRA Lite Manager</h1>
+            <p id="summary">正在读取本地 LoRA...</p>
+        </div>
+        <div class="topbar-actions">
+            <button id="refreshBtn" class="button secondary" type="button">刷新</button>
+            <button id="downloadPanelBtn" class="button primary" type="button">下载 LoRA</button>
+        </div>
+    </header>
+
+    <main class="layout">
+        <section class="content">
+            <div class="toolbar">
+                <label class="search-box">
+                    <span>搜索</span>
+                    <input id="searchInput" type="search" placeholder="名称、文件名、路径、触发词">
+                </label>
+                <label class="select-box">
+                    <span>目录</span>
+                    <select id="rootFilter">
+                        <option value="">全部</option>
+                    </select>
+                </label>
+            </div>
+            <div id="grid" class="grid" aria-live="polite"></div>
+            <div id="emptyState" class="empty" hidden>没有找到 LoRA。</div>
+        </section>
+
+        <aside id="detailsPanel" class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2 id="detailsTitle">选择一个 LoRA</h2>
+                    <p id="detailsPath">查看和编辑元数据</p>
+                </div>
+            </div>
+
+            <div id="detailsBody" class="details-empty">
+                从左侧选择一张卡片，或者先点击刷新扫描本地模型。
+            </div>
+        </aside>
+    </main>
+
+    <section id="downloadDrawer" class="drawer" hidden>
+        <div class="drawer-card">
+            <div class="panel-header">
+                <div>
+                    <h2>下载 LoRA</h2>
+                    <p>输入 Civitai modelVersionId，或带 modelVersionId 的链接。</p>
+                </div>
+                <button id="closeDownloadBtn" class="icon-button" type="button" aria-label="关闭">x</button>
+            </div>
+            <form id="downloadForm" class="form">
+                <label>
+                    <span>Civitai 链接或版本 ID</span>
+                    <input id="downloadInput" required placeholder="例如：https://civitai.com/models/123?modelVersionId=456">
+                </label>
+                <label>
+                    <span>保存根目录</span>
+                    <select id="downloadRoot"></select>
+                </label>
+                <label>
+                    <span>子目录，可留空</span>
+                    <input id="downloadSubdir" placeholder="例如：characters">
+                </label>
+                <button class="button primary" type="submit">开始下载</button>
+            </form>
+        </div>
+    </section>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/lora-lite-static/app.js"></script>
+</body>
+</html>
