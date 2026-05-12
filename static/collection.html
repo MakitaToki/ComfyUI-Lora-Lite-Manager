@@ -8,7 +8,7 @@
 </head>
 <body>
     <header class="topbar">
-        <div>
+        <div class="brand">
             <h1>Collection Lite</h1>
             <p id="summary">正在读取作品集...</p>
         </div>
@@ -21,21 +21,28 @@
 
     <main class="layout">
         <section class="content">
-            <form id="importForm" class="import-bar">
-                <label>
-                    <span>Civitai 图片 / 模型链接</span>
-                    <input id="importUrl" placeholder="https://civitai.com/images/123 或 https://civitai.com/models/456">
-                </label>
-                <label class="limit-field">
-                    <span>数量</span>
-                    <input id="importLimit" type="number" min="1" max="100" value="20">
-                </label>
-                <button class="button primary" type="submit">导入</button>
-            </form>
+            <section class="source-panel">
+                <div class="source-panel-header">
+                    <div>
+                        <h2>收集素材</h2>
+                        <p>Civitai 作品保留生成元数据，外部图片作为视觉参考。</p>
+                    </div>
+                </div>
+                <form id="importForm" class="import-bar">
+                    <label>
+                        <span>Civitai 图片 / 模型链接</span>
+                        <input id="importUrl" placeholder="https://civitai.com/images/123 或 https://civitai.com/models/456">
+                    </label>
+                    <label class="limit-field">
+                        <span>数量</span>
+                        <input id="importLimit" type="number" min="1" max="100" value="20">
+                    </label>
+                    <button class="button primary" type="submit">导入</button>
+                </form>
 
-            <details class="manual-panel">
-                <summary>添加外部视觉参考</summary>
-                <form id="manualForm" class="manual-form">
+                <details class="manual-panel">
+                    <summary>添加 Pinterest / 小红书 / 本地图片参考</summary>
+                    <form id="manualForm" class="manual-form">
                     <label>
                         <span>素材类型</span>
                         <select id="manualAssetType">
@@ -84,9 +91,10 @@
                         <span>备注</span>
                         <textarea id="manualNotes" rows="3" placeholder="这张图值得参考的地方"></textarea>
                     </label>
-                    <button class="button primary" type="submit">保存参考</button>
-                </form>
-            </details>
+                        <button class="button primary" type="submit">保存参考</button>
+                    </form>
+                </details>
+            </section>
 
             <div class="toolbar">
                 <label class="search-box">
@@ -105,7 +113,10 @@
             </div>
 
             <div id="grid" class="masonry" aria-live="polite"></div>
-            <div id="emptyState" class="empty" hidden>还没有作品。粘贴一条 Civitai 链接开始导入。</div>
+            <div id="emptyState" class="empty" hidden>
+                <strong>还没有收藏素材</strong>
+                <span>先导入一条 Civitai 链接，或者添加一张外部视觉参考图。</span>
+            </div>
         </section>
 
         <aside class="panel">

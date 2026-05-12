@@ -47,8 +47,16 @@ function init() {
     els.sortSelect.addEventListener("change", handleSort);
     els.refreshBtn.addEventListener("click", () => loadItems());
     els.exportBtn.addEventListener("click", handleExport);
-    els.closeExportBtn.addEventListener("click", () => {
-        els.exportDialog.hidden = true;
+    els.closeExportBtn.addEventListener("click", closeExportDialog);
+    els.exportDialog.addEventListener("click", (event) => {
+        if (event.target === els.exportDialog) {
+            closeExportDialog();
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !els.exportDialog.hidden) {
+            closeExportDialog();
+        }
     });
     loadItems();
 }
@@ -246,6 +254,10 @@ async function handleExport() {
     } finally {
         setBusy(false);
     }
+}
+
+function closeExportDialog() {
+    els.exportDialog.hidden = true;
 }
 
 function section(title, content) {
