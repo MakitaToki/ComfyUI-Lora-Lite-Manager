@@ -10,7 +10,6 @@ const state = {
 const els = {
     importForm: document.querySelector("#importForm"),
     importUrl: document.querySelector("#importUrl"),
-    importLimit: document.querySelector("#importLimit"),
     manualForm: document.querySelector("#manualForm"),
     manualAssetType: document.querySelector("#manualAssetType"),
     manualPlatform: document.querySelector("#manualPlatform"),
@@ -64,17 +63,16 @@ function init() {
 async function handleImport(event) {
     event.preventDefault();
     const url = els.importUrl.value.trim();
-    const limit = Number(els.importLimit.value || 20);
     if (!url) {
-        showToast("先粘贴一个 Civitai 链接");
+        showToast("先粘贴一条 Civitai 图片链接");
         return;
     }
 
-    setBusy(true, "正在拉取 Civitai 元数据和缩略图...");
+    setBusy(true, "正在导入这张 Civitai 图片...");
     try {
-        const result = await importCivitaiUrl({ url, limit });
+        const result = await importCivitaiUrl({ url });
         els.importUrl.value = "";
-        showToast(`已导入 ${result.count} 张作品`);
+        showToast(result.count ? "图片已导入" : "没有找到这张图片");
         await loadItems();
     } catch (error) {
         showToast(error.message, true);

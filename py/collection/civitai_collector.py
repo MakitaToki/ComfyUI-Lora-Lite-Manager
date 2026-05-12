@@ -1,26 +1,26 @@
 from __future__ import annotations
 
-import re
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
 
 from ..civitai import CIVITAI_API
 from ..downloader import Downloader
 from .image_cache import cache_image
 from .normalizer import normalize_civitai_image
 from .storage import upsert_artwork
+from .url_parser import parse_civitai_image_id
 
 
 class CivitaiArtworkCollector:
     def __init__(self, downloader: Downloader | None = None) -> None:
         self.downloader = downloader or Downloader()
 
-    async def import_url(self, url: str, *, limit: int = 20, cache_images: bool = True) -> list[dict[str, Any]]:
-        mode, value = parse_civitai_url(url)
-        if not mode or not value:
-            raise ValueError("请输入 Civitai 图片链接、模型链接，或 imageId/modelId")
+    async def import_url(self, url: str, *, cache_images: bool = True) -> list[dict[str, Any]]:
+        image_id = parse_civitai_image_id(url)
+        if not image_id:
+            raise ValueError("请输入 Civitai 图片链接，例如 https://civitai.com/images/123456")
 
-        payload = await self._fetch_images(mode, value, limit=limit)
+        payload = await self._fetch_image(image_id)
         items = payload.get("items") if isinstance(payload.get("items"), list) else []
 
         saved: list[dict[str, Any]] = []
@@ -36,49 +36,11 @@ class CivitaiArtworkCollector:
             saved.append(upsert_artwork(artwork))
         return saved
 
-    async def _fetch_images(self, mode: str, value: str, *, limit: int) -> dict[str, Any]:
-        limit = max(1, min(int(limit), 100))
+    async def _fetch_image(self, image_id: str) -> dict[str, Any]:
         params = {
-            "limit": str(limit),
+            "limit": "1",
             "withMeta": "true",
+            "imageId": image_id,
         }
-        if mode == "image":
-            params["imageId"] = value
-        elif mode == "model":
-            params["modelId"] = value
-            params["sort"] = "Most Reactions"
-            params["period"] = "AllTime"
-        elif mode == "model_version":
-            params["modelVersionId"] = value
-            params["sort"] = "Most Reactions"
-            params["period"] = "AllTime"
-        else:
-            raise ValueError(f"不支持的 Civitai 导入类型：{mode}")
-
         url = f"{CIVITAI_API}/images?{urlencode(params)}"
         return await self.downloader.request_json(url, use_auth=True)
-
-
-def parse_civitai_url(value: str) -> tuple[str, str]:
-    text = value.strip()
-    if not text:
-        return "", ""
-
-    if text.isdigit():
-        return "image", text
-
-    parsed = urlparse(text)
-    query = parse_qs(parsed.query)
-
-    if "modelVersionId" in query and query["modelVersionId"]:
-        return "model_version", query["modelVersionId"][0]
-
-    image_match = re.search(r"/images/(\d+)", parsed.path)
-    if image_match:
-        return "image", image_match.group(1)
-
-    model_match = re.search(r"/models/(\d+)", parsed.path)
-    if model_match:
-        return "model", model_match.group(1)
-
-    return "", ""

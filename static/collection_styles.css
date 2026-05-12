@@ -137,7 +137,7 @@ label span,
 
 .import-bar {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 96px auto;
+    grid-template-columns: minmax(220px, 1fr) auto;
     align-items: end;
 }
 
