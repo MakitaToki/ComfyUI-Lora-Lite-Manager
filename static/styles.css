@@ -102,6 +102,18 @@ textarea {
 .icon-button {
     width: 34px;
     height: 34px;
+    display: grid;
+    place-items: center;
+}
+
+.icon-button svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .layout {
@@ -307,6 +319,13 @@ textarea:focus {
 .form {
     display: grid;
     gap: 12px;
+}
+
+.field-note {
+    margin: -2px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
 }
 
 .drawer {

@@ -57,6 +57,18 @@ def _read_settings_file() -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def read_settings() -> dict[str, Any]:
+    return _read_settings_file()
+
+
+def write_settings(settings: dict[str, Any]) -> None:
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = SETTINGS_PATH.with_suffix(SETTINGS_PATH.suffix + ".tmp")
+    with temp_path.open("w", encoding="utf-8") as handle:
+        json.dump(settings, handle, ensure_ascii=False, indent=2)
+    os.replace(temp_path, SETTINGS_PATH)
+
+
 def load_config() -> PluginConfig:
     payload = _read_settings_file()
     proxy_payload = payload.get("proxy") if isinstance(payload.get("proxy"), dict) else {}

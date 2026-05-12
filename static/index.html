@@ -13,6 +13,12 @@
             <p id="summary">正在读取本地 LoRA...</p>
         </div>
         <div class="topbar-actions">
+            <button id="settingsBtn" class="icon-button" type="button" aria-label="设置" title="设置">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path>
+                    <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.8 15a1.8 1.8 0 0 0-1.65-1.1H2.1a2.1 2.1 0 0 1 0-4.2h.06A1.8 1.8 0 0 0 3.8 8.6a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2.1 2.1 0 0 1 6.37 3.6l.04.04a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.1-1.65V2.1a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.1h.06a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z"></path>
+                </svg>
+            </button>
             <button id="refreshBtn" class="button secondary" type="button">刷新</button>
             <button id="downloadPanelBtn" class="button primary" type="button">下载 LoRA</button>
         </div>
@@ -73,6 +79,29 @@
                     <input id="downloadSubdir" placeholder="例如：characters">
                 </label>
                 <button class="button primary" type="submit">开始下载</button>
+            </form>
+        </div>
+    </section>
+
+    <section id="settingsDrawer" class="drawer" hidden>
+        <div class="drawer-card">
+            <div class="panel-header">
+                <div>
+                    <h2>设置</h2>
+                    <p>保存 Civitai API key 后，下载受限模型会自动带上认证。</p>
+                </div>
+                <button id="closeSettingsBtn" class="icon-button" type="button" aria-label="关闭">x</button>
+            </div>
+            <form id="settingsForm" class="form">
+                <label>
+                    <span>Civitai API key</span>
+                    <input id="civitaiApiKeyInput" type="password" autocomplete="off" placeholder="粘贴你的 Civitai API key">
+                </label>
+                <p id="apiKeyStatus" class="field-note">尚未读取设置。</p>
+                <div class="action-row">
+                    <button class="button primary" type="submit">保存设置</button>
+                    <button id="testApiKeyBtn" class="button secondary" type="button">测试 API key</button>
+                </div>
             </form>
         </div>
     </section>

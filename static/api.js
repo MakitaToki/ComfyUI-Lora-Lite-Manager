@@ -12,6 +12,26 @@ export async function fetchRoots() {
     return readJson(await fetch(`${BASE}/roots`));
 }
 
+export async function fetchSettings() {
+    return readJson(await fetch(`${BASE}/settings`));
+}
+
+export async function saveSettings(settings) {
+    return readJson(await fetch(`${BASE}/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+    }));
+}
+
+export async function testCivitaiSettings() {
+    return readJson(await fetch(`${BASE}/settings/test-civitai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+    }));
+}
+
 export async function fetchLoras() {
     return readJson(await fetch(`${BASE}/loras`));
 }

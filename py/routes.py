@@ -7,7 +7,7 @@ from typing import Any
 from aiohttp import web
 
 from .civitai import CIVITAI_DOWNLOAD_PREFIX, CivitaiClient, normalize_download_url, select_model_file
-from .config import PLUGIN_ROOT, get_default_lora_root, get_lora_roots
+from .config import PLUGIN_ROOT, get_default_lora_root, get_lora_roots, load_config, read_settings, write_settings
 from .downloader import Downloader
 from .metadata import calculate_sha256, load_metadata, normalize_path, save_metadata
 from .scanner import find_lora_by_path, scan_loras
@@ -25,6 +25,9 @@ def register_routes() -> None:
 
     routes.get("/lora-lite")(lora_lite_page)
     routes.get("/api/lora-lite/roots")(get_roots)
+    routes.get("/api/lora-lite/settings")(get_settings)
+    routes.post("/api/lora-lite/settings")(update_settings)
+    routes.post("/api/lora-lite/settings/test-civitai")(test_civitai_settings)
     routes.get("/api/lora-lite/loras")(list_loras)
     routes.post("/api/lora-lite/scan")(scan_loras_route)
     routes.post("/api/lora-lite/hash")(hash_lora)
@@ -47,6 +50,38 @@ async def get_roots(request: web.Request) -> web.Response:
             "default_root": get_default_lora_root(),
         }
     )
+
+
+async def get_settings(request: web.Request) -> web.Response:
+    config = load_config()
+    settings = read_settings()
+    return web.json_response(
+        {
+            "success": True,
+            "settings": {
+                "civitai_api_key": config.civitai_api_key,
+                "has_civitai_api_key": bool(config.civitai_api_key),
+                "api_key_source": _api_key_source(settings),
+            },
+        }
+    )
+
+
+async def update_settings(request: web.Request) -> web.Response:
+    payload = await _read_json(request)
+    settings = read_settings()
+    if "civitai_api_key" in payload:
+        settings["civitai_api_key"] = str(payload.get("civitai_api_key", "") or "").strip()
+    write_settings(settings)
+    return await get_settings(request)
+
+
+async def test_civitai_settings(request: web.Request) -> web.Response:
+    try:
+        await CivitaiClient().get_model_version(2432252)
+        return web.json_response({"success": True})
+    except Exception as exc:
+        return web.json_response({"success": False, "error": str(exc)}, status=502)
 
 
 async def list_loras(request: web.Request) -> web.Response:
@@ -189,6 +224,14 @@ def _is_relative_to(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _api_key_source(settings: dict[str, Any]) -> str:
+    if os.environ.get("CIVITAI_API_KEY") or os.environ.get("LORA_LITE_CIVITAI_API_KEY"):
+        return "environment"
+    if str(settings.get("civitai_api_key", "") or "").strip():
+        return "settings"
+    return ""
 
 
 def _metadata_from_version(version: dict[str, Any], file_info: dict[str, Any], file_path: str | Path) -> dict[str, Any]:

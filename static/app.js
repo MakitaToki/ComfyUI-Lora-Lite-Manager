@@ -4,8 +4,11 @@ import {
     fetchCivitaiByHash,
     fetchLoras,
     fetchRoots,
+    fetchSettings,
     previewUrl,
     saveMetadata,
+    saveSettings,
+    testCivitaiSettings,
 } from "./api.js";
 
 const state = {
@@ -18,6 +21,7 @@ const state = {
 
 const els = {
     summary: document.getElementById("summary"),
+    settingsBtn: document.getElementById("settingsBtn"),
     refreshBtn: document.getElementById("refreshBtn"),
     downloadPanelBtn: document.getElementById("downloadPanelBtn"),
     searchInput: document.getElementById("searchInput"),
@@ -33,6 +37,12 @@ const els = {
     downloadInput: document.getElementById("downloadInput"),
     downloadRoot: document.getElementById("downloadRoot"),
     downloadSubdir: document.getElementById("downloadSubdir"),
+    settingsDrawer: document.getElementById("settingsDrawer"),
+    closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+    settingsForm: document.getElementById("settingsForm"),
+    civitaiApiKeyInput: document.getElementById("civitaiApiKeyInput"),
+    apiKeyStatus: document.getElementById("apiKeyStatus"),
+    testApiKeyBtn: document.getElementById("testApiKeyBtn"),
     toast: document.getElementById("toast"),
 };
 
@@ -352,6 +362,62 @@ async function submitDownload(event) {
     }
 }
 
+async function openSettings() {
+    els.settingsDrawer.hidden = false;
+    els.civitaiApiKeyInput.focus();
+    await loadSettings();
+}
+
+async function loadSettings() {
+    try {
+        const result = await fetchSettings();
+        const settings = result.settings || {};
+        els.civitaiApiKeyInput.value = settings.civitai_api_key || "";
+        if (settings.has_civitai_api_key) {
+            const source = settings.api_key_source === "environment" ? "环境变量" : "本地设置";
+            els.apiKeyStatus.textContent = `当前已配置 API key，来源：${source}。`;
+        } else {
+            els.apiKeyStatus.textContent = "当前未配置 API key，受限模型下载可能失败。";
+        }
+    } catch (error) {
+        els.apiKeyStatus.textContent = `读取设置失败：${error.message}`;
+    }
+}
+
+async function submitSettings(event) {
+    event.preventDefault();
+    setBusy(true, "正在保存设置...");
+    try {
+        await saveSettings({
+            civitai_api_key: els.civitaiApiKeyInput.value.trim(),
+        });
+        await loadSettings();
+        toast("设置已保存", "success");
+    } catch (error) {
+        toast(error.message, "error");
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function testApiKey() {
+    setBusy(true, "正在测试 Civitai API key...");
+    els.testApiKeyBtn.disabled = true;
+    try {
+        await saveSettings({
+            civitai_api_key: els.civitaiApiKeyInput.value.trim(),
+        });
+        await testCivitaiSettings();
+        await loadSettings();
+        toast("Civitai API key 可用", "success");
+    } catch (error) {
+        toast(error.message, "error");
+    } finally {
+        els.testApiKeyBtn.disabled = false;
+        setBusy(false);
+    }
+}
+
 async function loadRoots() {
     const result = await fetchRoots();
     state.roots = result.roots || [];
@@ -378,6 +444,7 @@ async function loadLoras({ quiet = false } = {}) {
 }
 
 function setBusy(isBusy, message = "") {
+    els.settingsBtn.disabled = isBusy;
     els.refreshBtn.disabled = isBusy;
     els.downloadPanelBtn.disabled = isBusy;
     if (message) {
@@ -399,6 +466,7 @@ function escapeAttr(value) {
 }
 
 function bindEvents() {
+    els.settingsBtn.addEventListener("click", openSettings);
     els.refreshBtn.addEventListener("click", () => loadLoras());
     els.searchInput.addEventListener("input", () => {
         state.search = els.searchInput.value;
@@ -421,6 +489,16 @@ function bindEvents() {
         }
     });
     els.downloadForm.addEventListener("submit", submitDownload);
+    els.closeSettingsBtn.addEventListener("click", () => {
+        els.settingsDrawer.hidden = true;
+    });
+    els.settingsDrawer.addEventListener("click", (event) => {
+        if (event.target === els.settingsDrawer) {
+            els.settingsDrawer.hidden = true;
+        }
+    });
+    els.settingsForm.addEventListener("submit", submitSettings);
+    els.testApiKeyBtn.addEventListener("click", testApiKey);
 }
 
 async function init() {
