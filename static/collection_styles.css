@@ -115,6 +115,30 @@ label span,
     margin-bottom: 14px;
 }
 
+.manual-panel {
+    margin-bottom: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #11151d;
+}
+
+.manual-panel summary {
+    padding: 12px 14px;
+    cursor: pointer;
+    color: #dce5f0;
+}
+
+.manual-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 0 14px 14px;
+}
+
+.manual-form .full {
+    grid-column: 1 / -1;
+}
+
 .import-bar label,
 .search-box {
     flex: 1;
@@ -352,5 +376,9 @@ textarea:focus {
 
     .limit-field {
         width: 100%;
+    }
+
+    .manual-form {
+        grid-template-columns: 1fr;
     }
 }

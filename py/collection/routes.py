@@ -8,14 +8,17 @@ from aiohttp import web
 
 from ..config import PLUGIN_ROOT
 from .civitai_collector import CivitaiArtworkCollector
-from .storage import COLLECTION_DIR, export_creative_seeds, get_artwork, search_artworks
+from .manual import add_manual_reference
+from .storage import COLLECTION_DIR, export_creative_seeds, get_artwork, search_artworks, upsert_artwork
 
 
 def register_collection_routes(routes: Any, app: web.Application) -> None:
     routes.get("/collection-lite")(collection_page)
     routes.post("/api/lora-lite/collection/import")(import_collection)
+    routes.post("/api/lora-lite/collection/manual")(add_manual_collection_item)
     routes.get("/api/lora-lite/collection/items")(list_collection)
     routes.get("/api/lora-lite/collection/items/{artwork_id}")(get_collection_item)
+    routes.patch("/api/lora-lite/collection/items/{artwork_id}")(update_collection_item)
     routes.get("/api/lora-lite/collection/image")(collection_image)
     routes.post("/api/lora-lite/collection/export-seeds")(export_collection_seeds)
 
@@ -50,11 +53,44 @@ async def list_collection(request: web.Request) -> web.Response:
     return web.json_response({"success": True, **result})
 
 
+async def add_manual_collection_item(request: web.Request) -> web.Response:
+    payload = await _read_json(request)
+    try:
+        item = await add_manual_reference(payload)
+        return web.json_response({"success": True, "item": item})
+    except Exception as exc:
+        return web.json_response({"success": False, "error": str(exc)}, status=400)
+
+
 async def get_collection_item(request: web.Request) -> web.Response:
     item = get_artwork(request.match_info.get("artwork_id", ""))
     if item is None:
         return web.json_response({"success": False, "error": "Artwork not found"}, status=404)
     return web.json_response({"success": True, "item": item})
+
+
+async def update_collection_item(request: web.Request) -> web.Response:
+    item = get_artwork(request.match_info.get("artwork_id", ""))
+    if item is None:
+        return web.json_response({"success": False, "error": "Artwork not found"}, status=404)
+
+    payload = await _read_json(request)
+    allowed = {
+        "asset_type",
+        "positive_prompt",
+        "negative_prompt",
+        "raw_tags",
+        "visual_structure",
+        "design_language",
+        "transfer",
+        "aigc_seed",
+        "retrieval",
+        "user_notes",
+    }
+    for key in allowed:
+        if key in payload:
+            item[key] = payload[key]
+    return web.json_response({"success": True, "item": upsert_artwork(item)})
 
 
 async def collection_image(request: web.Request) -> web.StreamResponse:

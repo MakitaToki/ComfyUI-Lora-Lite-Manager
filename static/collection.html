@@ -33,6 +33,61 @@
                 <button class="button primary" type="submit">导入</button>
             </form>
 
+            <details class="manual-panel">
+                <summary>添加外部视觉参考</summary>
+                <form id="manualForm" class="manual-form">
+                    <label>
+                        <span>素材类型</span>
+                        <select id="manualAssetType">
+                            <option value="photo_reference">摄影参考</option>
+                            <option value="graphic_design_reference">平面设计参考</option>
+                            <option value="ai_generation_reference">AI / 插画生成参考</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>平台</span>
+                        <input id="manualPlatform" placeholder="pinterest / xiaohongshu / web / local">
+                    </label>
+                    <label>
+                        <span>来源页面，可留空</span>
+                        <input id="manualSourceUrl" placeholder="https://...">
+                    </label>
+                    <label>
+                        <span>图片 URL</span>
+                        <input id="manualImageUrl" placeholder="https://...jpg">
+                    </label>
+                    <label>
+                        <span>本地图片路径，可替代图片 URL</span>
+                        <input id="manualLocalPath" placeholder="C:\Users\Administrator\Pictures\ref.png">
+                    </label>
+                    <label>
+                        <span>主体 / 用途</span>
+                        <input id="manualSubject" placeholder="例如：护肤品海报、室内摄影、角色立绘">
+                    </label>
+                    <label>
+                        <span>构图 / 版式</span>
+                        <input id="manualComposition" placeholder="例如：主体居中、大留白、标题左上">
+                    </label>
+                    <label>
+                        <span>色彩 / 光影</span>
+                        <input id="manualColorLighting" placeholder="例如：米白黑红，柔光，高调">
+                    </label>
+                    <label>
+                        <span>设计语言 / 后期</span>
+                        <input id="manualDesignLanguage" placeholder="例如：无衬线大标题、胶片颗粒、细线框">
+                    </label>
+                    <label class="full">
+                        <span>关键词</span>
+                        <input id="manualTags" placeholder="中文或英文标签，用逗号分隔">
+                    </label>
+                    <label class="full">
+                        <span>备注</span>
+                        <textarea id="manualNotes" rows="3" placeholder="这张图值得参考的地方"></textarea>
+                    </label>
+                    <button class="button primary" type="submit">保存参考</button>
+                </form>
+            </details>
+
             <div class="toolbar">
                 <label class="search-box">
                     <span>搜索</span>
@@ -81,4 +136,3 @@
     <script type="module" src="/lora-lite-static/collection_app.js"></script>
 </body>
 </html>
-

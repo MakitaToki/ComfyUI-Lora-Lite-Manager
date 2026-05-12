@@ -16,6 +16,22 @@ export async function importCivitaiUrl({ url, limit }) {
     }));
 }
 
+export async function addManualReference(payload) {
+    return readJson(await fetch(`${BASE}/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    }));
+}
+
+export async function updateArtwork(id, payload) {
+    return readJson(await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    }));
+}
+
 export async function fetchArtworks({ query = "", sort = "newest", limit = 60, offset = 0 } = {}) {
     const params = new URLSearchParams({ q: query, sort, limit, offset });
     return readJson(await fetch(`${BASE}/items?${params}`));
@@ -42,4 +58,3 @@ export function collectionImageUrl(path) {
     }
     return `${BASE}/image?path=${encodeURIComponent(path)}`;
 }
-

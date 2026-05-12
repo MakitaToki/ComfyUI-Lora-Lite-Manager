@@ -1,4 +1,4 @@
-import { collectionImageUrl, exportSeeds, fetchArtworks, fetchArtwork, importCivitaiUrl } from "./collection_api.js";
+import { addManualReference, collectionImageUrl, exportSeeds, fetchArtworks, fetchArtwork, importCivitaiUrl } from "./collection_api.js";
 
 const state = {
     items: [],
@@ -11,6 +11,18 @@ const els = {
     importForm: document.querySelector("#importForm"),
     importUrl: document.querySelector("#importUrl"),
     importLimit: document.querySelector("#importLimit"),
+    manualForm: document.querySelector("#manualForm"),
+    manualAssetType: document.querySelector("#manualAssetType"),
+    manualPlatform: document.querySelector("#manualPlatform"),
+    manualSourceUrl: document.querySelector("#manualSourceUrl"),
+    manualImageUrl: document.querySelector("#manualImageUrl"),
+    manualLocalPath: document.querySelector("#manualLocalPath"),
+    manualSubject: document.querySelector("#manualSubject"),
+    manualComposition: document.querySelector("#manualComposition"),
+    manualColorLighting: document.querySelector("#manualColorLighting"),
+    manualDesignLanguage: document.querySelector("#manualDesignLanguage"),
+    manualTags: document.querySelector("#manualTags"),
+    manualNotes: document.querySelector("#manualNotes"),
     searchInput: document.querySelector("#searchInput"),
     sortSelect: document.querySelector("#sortSelect"),
     refreshBtn: document.querySelector("#refreshBtn"),
@@ -30,6 +42,7 @@ init();
 
 function init() {
     els.importForm.addEventListener("submit", handleImport);
+    els.manualForm.addEventListener("submit", handleManualAdd);
     els.searchInput.addEventListener("input", debounce(handleSearch, 180));
     els.sortSelect.addEventListener("change", handleSort);
     els.refreshBtn.addEventListener("click", () => loadItems());
@@ -54,6 +67,66 @@ async function handleImport(event) {
         const result = await importCivitaiUrl({ url, limit });
         els.importUrl.value = "";
         showToast(`已导入 ${result.count} 张作品`);
+        await loadItems();
+    } catch (error) {
+        showToast(error.message, true);
+    } finally {
+        setBusy(false);
+    }
+}
+
+async function handleManualAdd(event) {
+    event.preventDefault();
+    const imageUrl = els.manualImageUrl.value.trim();
+    const localPath = els.manualLocalPath.value.trim();
+    if (!imageUrl && !localPath) {
+        showToast("图片 URL 和本地图片路径至少填一个");
+        return;
+    }
+
+    const assetType = els.manualAssetType.value;
+    const subject = els.manualSubject.value.trim();
+    const composition = els.manualComposition.value.trim();
+    const colorLighting = els.manualColorLighting.value.trim();
+    const designLanguage = els.manualDesignLanguage.value.trim();
+    const tags = splitTags(els.manualTags.value);
+
+    setBusy(true, "正在保存视觉参考...");
+    try {
+        await addManualReference({
+            asset_type: assetType,
+            source: {
+                platform: els.manualPlatform.value.trim() || (localPath ? "local" : "web"),
+                source_url: els.manualSourceUrl.value.trim(),
+                image_url: imageUrl,
+                local_image_path: localPath,
+            },
+            tags,
+            visual_structure: {
+                subject,
+                composition,
+                lighting: colorLighting,
+                color_palette: splitTags(colorLighting),
+                mood: "",
+            },
+            design_language: {
+                color: colorLighting,
+                typography: assetType === "graphic_design_reference" ? designLanguage : "",
+                layout: composition,
+                imagery: subject,
+                post_process: designLanguage,
+            },
+            retrieval: {
+                keywords_zh: tags,
+                keywords_en: [],
+                embedding_text: [subject, composition, colorLighting, designLanguage, els.manualNotes.value.trim()].filter(Boolean).join("，"),
+            },
+            positive_prompt: "",
+            negative_prompt: assetType === "graphic_design_reference" ? "text, logo, watermark, distorted typography" : "",
+            user_notes: els.manualNotes.value.trim(),
+        });
+        els.manualForm.reset();
+        showToast("视觉参考已保存");
         await loadItems();
     } catch (error) {
         showToast(error.message, true);
@@ -105,8 +178,9 @@ function renderGrid() {
 
         const body = document.createElement("div");
         body.className = "art-card-body";
-        body.append(textEl("strong", firstTag(item) || `Civitai #${item.source_id}`));
-        body.append(textEl("span", compactPrompt(item.positive_prompt)));
+        body.append(textEl("strong", cardTitle(item)));
+        body.append(textEl("span", assetTypeLabel(item.asset_type)));
+        body.append(textEl("span", compactPrompt(cardDescription(item))));
         body.append(renderStats(item));
         card.append(body);
 
@@ -139,18 +213,25 @@ function renderDetails(item, loading) {
     img.alt = firstTag(item) || item.source_id;
     els.detailsBody.append(img);
 
+    els.detailsBody.append(section("素材类型", assetTypeLabel(item.asset_type)));
     els.detailsBody.append(section("正向提示词", item.positive_prompt || "无"));
     els.detailsBody.append(section("负向提示词", item.negative_prompt || "无"));
+    els.detailsBody.append(jsonSection("视觉结构", item.visual_structure || {}));
+    els.detailsBody.append(jsonSection("设计语言", item.design_language || {}));
+    els.detailsBody.append(jsonSection("迁移规则", item.transfer || {}));
+    els.detailsBody.append(section("备注", item.user_notes || "无"));
     els.detailsBody.append(tagSection(item.raw_tags || []));
     els.detailsBody.append(modelSection(item.model_refs || []));
 
     const link = document.createElement("a");
     link.className = "button secondary wide";
-    link.href = item.source_url;
+    link.href = item.source_url || item.image_url || "#";
     link.target = "_blank";
     link.rel = "noreferrer";
-    link.textContent = loading ? "正在补全详情..." : "打开 Civitai 原图";
-    els.detailsBody.append(link);
+    link.textContent = loading ? "正在补全详情..." : "打开来源";
+    if (item.source_url || item.image_url) {
+        els.detailsBody.append(link);
+    }
 }
 
 async function handleExport() {
@@ -173,6 +254,14 @@ function section(title, content) {
     block.append(textEl("h3", title));
     block.append(textEl("p", content));
     return block;
+}
+
+function jsonSection(title, value) {
+    const content = Object.entries(value)
+        .filter(([, item]) => item !== "" && item !== null && item !== undefined && (!Array.isArray(item) || item.length))
+        .map(([key, item]) => `${key}: ${Array.isArray(item) ? item.join(", ") : item}`)
+        .join("\n");
+    return section(title, content || "无");
 }
 
 function tagSection(tags) {
@@ -209,8 +298,12 @@ function renderStats(item) {
     const stats = item.stats || {};
     const row = document.createElement("div");
     row.className = "stats";
-    row.append(textEl("span", `♡ ${stats.heartCount ?? 0}`));
-    row.append(textEl("span", `赞 ${stats.likeCount ?? 0}`));
+    if (item.source === "civitai") {
+        row.append(textEl("span", `♡ ${stats.heartCount ?? 0}`));
+        row.append(textEl("span", `赞 ${stats.likeCount ?? 0}`));
+    } else {
+        row.append(textEl("span", item.source || "manual"));
+    }
     return row;
 }
 
@@ -220,6 +313,26 @@ function compactPrompt(value) {
 
 function firstTag(item) {
     return (item.raw_tags || [])[0] || "";
+}
+
+function cardTitle(item) {
+    return firstTag(item) || item.visual_structure?.subject || item.retrieval?.embedding_text || `${item.source} #${item.source_id}`;
+}
+
+function cardDescription(item) {
+    return item.positive_prompt || item.user_notes || item.visual_structure?.composition || item.design_language?.layout || "无描述";
+}
+
+function assetTypeLabel(value) {
+    return {
+        ai_generation_reference: "AI / 插画生成参考",
+        photo_reference: "摄影参考",
+        graphic_design_reference: "平面设计参考",
+    }[value] || "参考素材";
+}
+
+function splitTags(value) {
+    return value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function textEl(tag, text) {
@@ -252,4 +365,3 @@ function debounce(fn, wait) {
         timer = window.setTimeout(() => fn(...args), wait);
     };
 }
-

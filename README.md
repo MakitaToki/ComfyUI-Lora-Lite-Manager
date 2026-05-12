@@ -12,6 +12,7 @@ A minimal ComfyUI plugin focused only on LoRA management.
 - Download a Civitai model version into a LoRA folder.
 - Use explicit HTTP/HTTPS proxy settings for API and file downloads.
 - Build a lightweight Civitai artwork collection at `/collection-lite` for prompt/tag research.
+- Add manual visual references from image URLs or local image paths, with separate asset types for AI generation, photography, and graphic design references.
 
 It intentionally does not include recipes, checkpoints, embeddings, randomizers, virtual scrolling, batch tools, or a full standalone app.
 
@@ -78,8 +79,10 @@ SOCKS proxies are intentionally rejected unless `aiohttp-socks` is installed and
 - `POST /api/lora-lite/download`
 - `GET /collection-lite`
 - `POST /api/lora-lite/collection/import`
+- `POST /api/lora-lite/collection/manual`
 - `GET /api/lora-lite/collection/items`
 - `GET /api/lora-lite/collection/items/{artwork_id}`
+- `PATCH /api/lora-lite/collection/items/{artwork_id}`
 - `POST /api/lora-lite/collection/export-seeds`
 
 Example download payload:

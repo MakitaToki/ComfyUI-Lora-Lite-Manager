@@ -17,6 +17,7 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": f"civitai_image_{image_id}",
         "source": "civitai",
+        "asset_type": "ai_generation_reference",
         "source_id": image_id,
         "source_url": f"https://civitai.com/images/{image_id}" if image_id else "",
         "image_url": str(item.get("url") or ""),
@@ -32,6 +33,21 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
         "model_refs": model_refs,
         "stats": stats,
         "meta": meta,
+        "visual_structure": {},
+        "design_language": {},
+        "transfer": {
+            "use_for_generation": ["prompt", "style", "composition", "lora_test"],
+            "use_for_postprocess": [],
+            "do_not_generate": [],
+            "requires_design_stage": False,
+        },
+        "aigc_seed": {},
+        "retrieval": {
+            "keywords_zh": [],
+            "keywords_en": tags[:24],
+            "embedding_text": positive,
+        },
+        "user_notes": "",
         "created_at": str(item.get("createdAt") or ""),
         "collected_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -122,4 +138,3 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(key)
         result.append(normalized)
     return result
-
