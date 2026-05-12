@@ -33,8 +33,10 @@ export async function updateArtwork(id, payload) {
 }
 
 export async function deleteArtwork(id) {
-    return readJson(await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
-        method: "DELETE",
+    return readJson(await fetch(`${BASE}/items/${encodeURIComponent(id)}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
     }));
 }
 

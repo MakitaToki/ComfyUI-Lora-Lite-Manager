@@ -20,6 +20,7 @@ def register_collection_routes(routes: Any, app: web.Application) -> None:
     routes.get("/api/lora-lite/collection/items/{artwork_id}")(get_collection_item)
     routes.patch("/api/lora-lite/collection/items/{artwork_id}")(update_collection_item)
     routes.delete("/api/lora-lite/collection/items/{artwork_id}")(delete_collection_item)
+    routes.post("/api/lora-lite/collection/items/{artwork_id}/delete")(delete_collection_item)
     routes.get("/api/lora-lite/collection/image")(collection_image)
     routes.post("/api/lora-lite/collection/export-seeds")(export_collection_seeds)
 
