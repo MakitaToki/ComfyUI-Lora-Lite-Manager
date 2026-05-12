@@ -13,6 +13,7 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
     negative = _first_text(meta, ("negativePrompt", "Negative prompt", "negative_prompt"))
     tags = _extract_tags(item, positive)
     model_refs = _extract_model_refs(item, meta)
+    generation = _extract_generation(meta)
 
     return {
         "id": f"civitai_image_{image_id}",
@@ -32,7 +33,7 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
         "raw_tags": tags,
         "model_refs": model_refs,
         "stats": stats,
-        "meta": meta,
+        "meta": {**meta, "generation": generation},
         "visual_structure": {},
         "design_language": {},
         "transfer": {
@@ -41,7 +42,7 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
             "do_not_generate": [],
             "requires_design_stage": False,
         },
-        "aigc_seed": {},
+        "aigc_seed": generation,
         "retrieval": {
             "keywords_zh": [],
             "keywords_en": tags[:24],
@@ -82,20 +83,23 @@ def _extract_tags(item: dict[str, Any], positive_prompt: str) -> list[str]:
 def _extract_model_refs(item: dict[str, Any], meta: dict[str, Any]) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
 
-    for key in ("resources", "Models"):
+    for key in ("resources", "Resources", "models", "Models"):
         resources = meta.get(key)
         if not isinstance(resources, list):
             continue
         for resource in resources:
             if not isinstance(resource, dict):
                 continue
+            resource_type = resource.get("type") or resource.get("modelType") or resource.get("model_type") or ""
             refs.append(
                 {
                     "name": resource.get("name") or resource.get("modelName") or "",
-                    "type": resource.get("type") or resource.get("modelType") or "",
-                    "weight": resource.get("weight"),
-                    "model_version_id": resource.get("modelVersionId"),
-                    "model_id": resource.get("modelId"),
+                    "type": str(resource_type).upper() if resource_type else "",
+                    "version": resource.get("version") or resource.get("modelVersionName") or "",
+                    "weight": resource.get("weight") or resource.get("strength"),
+                    "model_version_id": resource.get("modelVersionId") or resource.get("model_version_id"),
+                    "model_id": resource.get("modelId") or resource.get("model_id"),
+                    "hash": resource.get("hash") or resource.get("sha256") or "",
                 }
             )
 
@@ -110,6 +114,27 @@ def _extract_model_refs(item: dict[str, Any], meta: dict[str, Any]) -> list[dict
         )
 
     return [ref for ref in refs if any(ref.values())]
+
+
+def _extract_generation(meta: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "cfg_scale": _first_existing(meta, ("cfgScale", "CFG scale", "cfg_scale", "cfg")),
+        "steps": _first_existing(meta, ("steps", "Steps")),
+        "sampler": _first_existing(meta, ("sampler", "Sampler")),
+        "seed": _first_existing(meta, ("seed", "Seed")),
+        "clip_skip": _first_existing(meta, ("clipSkip", "Clip skip", "clip_skip")),
+        "size": _first_existing(meta, ("Size", "size")),
+        "model": _first_existing(meta, ("Model", "model", "modelName")),
+        "scheduler": _first_existing(meta, ("scheduler", "Scheduler")),
+    }
+
+
+def _first_existing(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, ""):
+            return value
+    return ""
 
 
 def _creator_name(item: dict[str, Any]) -> str:

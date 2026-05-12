@@ -220,6 +220,8 @@ function renderDetails(item, loading) {
     els.detailsBody.append(img);
 
     els.detailsBody.append(section("素材类型", assetTypeLabel(item.asset_type)));
+    els.detailsBody.append(generationSection(item));
+    els.detailsBody.append(modelSection(item.model_refs || []));
     els.detailsBody.append(section("正向提示词", item.positive_prompt || "无"));
     els.detailsBody.append(section("负向提示词", item.negative_prompt || "无"));
     els.detailsBody.append(jsonSection("视觉结构", item.visual_structure || {}));
@@ -227,7 +229,6 @@ function renderDetails(item, loading) {
     els.detailsBody.append(jsonSection("迁移规则", item.transfer || {}));
     els.detailsBody.append(section("备注", item.user_notes || "无"));
     els.detailsBody.append(tagSection(item.raw_tags || []));
-    els.detailsBody.append(modelSection(item.model_refs || []));
 
     const link = document.createElement("a");
     link.className = "button secondary wide";
@@ -294,13 +295,48 @@ function modelSection(models) {
     const list = document.createElement("div");
     list.className = "model-list";
     for (const model of models.slice(0, 20)) {
-        const row = textEl("div", [model.name, model.type, model.weight ? `w=${model.weight}` : ""].filter(Boolean).join(" · "));
+        const row = textEl("div", [
+            model.name,
+            model.version ? `v${model.version}` : "",
+            model.type,
+            model.weight ? `weight ${model.weight}` : "",
+        ].filter(Boolean).join(" · "));
         list.append(row);
     }
     if (!models.length) {
         list.append(textEl("div", "无"));
     }
     block.append(list);
+    return block;
+}
+
+function generationSection(item) {
+    const generation = item.aigc_seed || item.meta?.generation || {};
+    const rows = [
+        ["CFG", generation.cfg_scale],
+        ["Steps", generation.steps],
+        ["Sampler", generation.sampler],
+        ["Seed", generation.seed],
+        ["Clip skip", generation.clip_skip],
+        ["Size", generation.size],
+        ["Model", generation.model],
+    ].filter(([, value]) => value !== "" && value !== null && value !== undefined);
+
+    const block = document.createElement("section");
+    block.className = "detail-section";
+    block.append(textEl("h3", "Generation data"));
+    if (!rows.length) {
+        block.append(textEl("p", "无"));
+        return block;
+    }
+
+    const chips = document.createElement("div");
+    chips.className = "meta-chips";
+    for (const [label, value] of rows) {
+        const chip = textEl("span", `${label}: ${value}`);
+        chips.append(chip);
+    }
+    block.append(chips);
     return block;
 }
 

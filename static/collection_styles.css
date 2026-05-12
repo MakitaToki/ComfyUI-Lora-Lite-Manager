@@ -337,16 +337,30 @@ textarea:focus {
     word-break: break-word;
 }
 
-.tags {
+.tags,
+.meta-chips {
     flex-wrap: wrap;
 }
 
-.tags span {
+.tags span,
+.meta-chips span {
     border: 1px solid var(--line);
     border-radius: 999px;
     color: #c8d2df;
     padding: 4px 8px;
     font-size: 12px;
+}
+
+.meta-chips {
+    display: flex;
+    gap: 8px;
+}
+
+.meta-chips span {
+    color: #8ed1ff;
+    background: rgba(45, 111, 160, 0.26);
+    border-color: rgba(89, 159, 210, 0.22);
+    font-weight: 650;
 }
 
 .empty {
