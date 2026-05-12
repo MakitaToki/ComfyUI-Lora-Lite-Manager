@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
+def normalize_civitai_image(item: dict[str, Any], *, title: str = "") -> dict[str, Any]:
     image_id = str(item.get("id") or "").strip()
     raw_meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
     meta = _unwrap_civitai_meta(raw_meta)
@@ -15,6 +15,7 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
     tags = _extract_tags(item, positive)
     model_refs = _extract_model_refs(item, meta)
     generation = _extract_generation(meta)
+    display_title = title.strip() or f"Civitai #{image_id}"
 
     return {
         "id": f"civitai_image_{image_id}",
@@ -37,7 +38,9 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
         "meta": {
             **meta,
             "generation": generation,
+            "raw_generation": _extract_raw_generation(meta),
             "modelVersionIds": item.get("modelVersionIds") if isinstance(item.get("modelVersionIds"), list) else [],
+            "title": display_title,
         },
         "visual_structure": {},
         "design_language": {},
@@ -53,7 +56,7 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
             "keywords_en": tags[:24],
             "embedding_text": positive,
         },
-        "user_notes": "",
+        "user_notes": display_title,
         "created_at": str(item.get("createdAt") or ""),
         "collected_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -141,7 +144,23 @@ def _extract_generation(meta: dict[str, Any]) -> dict[str, Any]:
         "size": _first_existing(meta, ("Size", "size")),
         "model": _first_existing(meta, ("Model", "model", "modelName")),
         "scheduler": _first_existing(meta, ("scheduler", "Scheduler")),
+        "width": _first_existing(meta, ("width", "Width")),
+        "height": _first_existing(meta, ("height", "Height")),
+        "model_hash": _first_existing(meta, ("Model hash", "modelHash", "model_hash")),
+        "schedule_type": _first_existing(meta, ("Schedule type", "scheduleType")),
+        "hires_steps": _first_existing(meta, ("Hires steps", "hires_steps")),
+        "hires_upscale": _first_existing(meta, ("Hires upscale", "hires_upscale")),
+        "hires_upscaler": _first_existing(meta, ("Hires upscaler", "hires_upscaler")),
+        "hires_cfg_scale": _first_existing(meta, ("Hires CFG Scale", "hires_cfg_scale")),
+        "denoising_strength": _first_existing(meta, ("Denoising strength", "denoising_strength")),
+        "token_merging_ratio": _first_existing(meta, ("Token merging ratio", "token_merging_ratio")),
+        "token_merging_ratio_hr": _first_existing(meta, ("Token merging ratio hr", "token_merging_ratio_hr")),
     }
+
+
+def _extract_raw_generation(meta: dict[str, Any]) -> dict[str, Any]:
+    skip = {"prompt", "negativePrompt", "resources", "Resources", "models", "Models", "hashes"}
+    return {key: value for key, value in meta.items() if key not in skip}
 
 
 def _first_existing(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:

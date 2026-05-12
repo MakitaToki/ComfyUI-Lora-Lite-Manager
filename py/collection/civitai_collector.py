@@ -15,7 +15,7 @@ class CivitaiArtworkCollector:
     def __init__(self, downloader: Downloader | None = None) -> None:
         self.downloader = downloader or Downloader()
 
-    async def import_url(self, url: str, *, cache_images: bool = True) -> list[dict[str, Any]]:
+    async def import_url(self, url: str, *, title: str = "", cache_images: bool = True) -> list[dict[str, Any]]:
         image_id = parse_civitai_image_id(url)
         if not image_id:
             raise ValueError("请输入 Civitai 图片链接，例如 https://civitai.com/images/123456")
@@ -27,7 +27,7 @@ class CivitaiArtworkCollector:
         for raw in items:
             if not isinstance(raw, dict):
                 continue
-            artwork = normalize_civitai_image(raw)
+            artwork = normalize_civitai_image(raw, title=title)
             if cache_images:
                 try:
                     artwork["preview_path"] = await cache_image(artwork["image_url"], artwork["id"])

@@ -33,12 +33,13 @@ async def collection_page(request: web.Request) -> web.Response:
 async def import_collection(request: web.Request) -> web.Response:
     payload = await _read_json(request)
     url = str(payload.get("url", "") or "").strip()
+    title = str(payload.get("title", "") or "").strip()
     cache_images = bool(payload.get("cache_images", True))
     if not url:
         return web.json_response({"success": False, "error": "url is required"}, status=400)
 
     try:
-        items = await CivitaiArtworkCollector().import_url(url, cache_images=cache_images)
+        items = await CivitaiArtworkCollector().import_url(url, title=title, cache_images=cache_images)
         return web.json_response({"success": True, "items": items, "count": len(items)})
     except Exception as exc:
         return web.json_response({"success": False, "error": str(exc)}, status=502)

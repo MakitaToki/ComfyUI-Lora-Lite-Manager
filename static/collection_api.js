@@ -8,11 +8,11 @@ async function readJson(response) {
     return payload;
 }
 
-export async function importCivitaiUrl({ url }) {
+export async function importCivitaiUrl({ url, title = "" }) {
     return readJson(await fetch(`${BASE}/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, cache_images: true }),
+        body: JSON.stringify({ url, title, cache_images: true }),
     }));
 }
 

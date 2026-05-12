@@ -10,6 +10,7 @@ const state = {
 const els = {
     importForm: document.querySelector("#importForm"),
     importUrl: document.querySelector("#importUrl"),
+    importTitle: document.querySelector("#importTitle"),
     manualForm: document.querySelector("#manualForm"),
     manualAssetType: document.querySelector("#manualAssetType"),
     manualPlatform: document.querySelector("#manualPlatform"),
@@ -63,6 +64,7 @@ function init() {
 async function handleImport(event) {
     event.preventDefault();
     const url = els.importUrl.value.trim();
+    const title = els.importTitle.value.trim();
     if (!url) {
         showToast("先粘贴一条 Civitai 图片链接");
         return;
@@ -70,8 +72,9 @@ async function handleImport(event) {
 
     setBusy(true, "正在导入这张 Civitai 图片...");
     try {
-        const result = await importCivitaiUrl({ url });
+        const result = await importCivitaiUrl({ url, title });
         els.importUrl.value = "";
+        els.importTitle.value = "";
         showToast(result.count ? "图片已导入" : "没有找到这张图片");
         await loadItems();
         if (result.items?.[0]?.id) {
@@ -213,7 +216,7 @@ function renderDetails(item, loading) {
     if (!item) {
         return;
     }
-    els.detailsTitle.textContent = firstTag(item) || `Civitai #${item.source_id}`;
+    els.detailsTitle.textContent = cardTitle(item);
     els.detailsBody.replaceChildren();
 
     const img = document.createElement("img");
@@ -355,8 +358,17 @@ function generationSection(item) {
         ["Sampler", generation.sampler],
         ["Seed", generation.seed],
         ["Clip skip", generation.clip_skip],
-        ["Size", generation.size],
+        ["Size", generation.size || sizeFromGeneration(generation)],
         ["Model", generation.model],
+        ["Model hash", generation.model_hash],
+        ["Schedule", generation.schedule_type || generation.scheduler],
+        ["Hires steps", generation.hires_steps],
+        ["Hires upscale", generation.hires_upscale],
+        ["Hires upscaler", generation.hires_upscaler],
+        ["Hires CFG", generation.hires_cfg_scale],
+        ["Denoising", generation.denoising_strength],
+        ["Token merge", generation.token_merging_ratio],
+        ["Token merge HR", generation.token_merging_ratio_hr],
     ].filter(([, value]) => value !== "" && value !== null && value !== undefined);
 
     const block = document.createElement("section");
@@ -408,7 +420,7 @@ function firstTag(item) {
 }
 
 function cardTitle(item) {
-    return firstTag(item) || item.visual_structure?.subject || item.retrieval?.embedding_text || `${item.source} #${item.source_id}`;
+    return item.meta?.title || item.user_notes || firstTag(item) || item.visual_structure?.subject || item.retrieval?.embedding_text || `${item.source} #${item.source_id}`;
 }
 
 function cardDescription(item) {
@@ -425,6 +437,13 @@ function assetTypeLabel(value) {
 
 function splitTags(value) {
     return value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function sizeFromGeneration(generation) {
+    if (generation.width && generation.height) {
+        return `${generation.width}x${generation.height}`;
+    }
+    return "";
 }
 
 function textEl(tag, text) {
