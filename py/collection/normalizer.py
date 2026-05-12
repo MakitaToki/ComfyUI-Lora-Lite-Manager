@@ -6,7 +6,8 @@ from typing import Any
 
 def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
     image_id = str(item.get("id") or "").strip()
-    meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+    raw_meta = item.get("meta") if isinstance(item.get("meta"), dict) else {}
+    meta = _unwrap_civitai_meta(raw_meta)
     stats = item.get("stats") if isinstance(item.get("stats"), dict) else {}
 
     positive = _first_text(meta, ("prompt", "Prompt", "positivePrompt", "Positive prompt"))
@@ -33,7 +34,11 @@ def normalize_civitai_image(item: dict[str, Any]) -> dict[str, Any]:
         "raw_tags": tags,
         "model_refs": model_refs,
         "stats": stats,
-        "meta": {**meta, "generation": generation},
+        "meta": {
+            **meta,
+            "generation": generation,
+            "modelVersionIds": item.get("modelVersionIds") if isinstance(item.get("modelVersionIds"), list) else [],
+        },
         "visual_structure": {},
         "design_language": {},
         "transfer": {
@@ -60,6 +65,16 @@ def _first_text(payload: dict[str, Any], keys: tuple[str, ...]) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _unwrap_civitai_meta(raw_meta: dict[str, Any]) -> dict[str, Any]:
+    nested = raw_meta.get("meta")
+    if isinstance(nested, dict):
+        return {
+            **nested,
+            "civitai_meta_id": raw_meta.get("id"),
+        }
+    return raw_meta
 
 
 def _extract_tags(item: dict[str, Any], positive_prompt: str) -> list[str]:
