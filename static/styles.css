@@ -78,8 +78,13 @@ textarea {
 }
 
 .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 38px;
     padding: 0 14px;
+    text-decoration: none;
+    line-height: 1;
 }
 
 .button.primary {
