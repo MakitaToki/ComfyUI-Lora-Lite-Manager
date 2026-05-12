@@ -184,6 +184,22 @@ def get_artwork(artwork_id: str, db_path: Path = DB_PATH) -> dict[str, Any] | No
     return _deserialize(row) if row else None
 
 
+def delete_artwork(artwork_id: str, *, delete_cached_image: bool = False, db_path: Path = DB_PATH) -> bool:
+    init_db(db_path)
+    item = get_artwork(artwork_id, db_path)
+    if item is None:
+        return False
+
+    with closing(_connect(db_path)) as conn:
+        with conn:
+            conn.execute("DELETE FROM artworks_fts WHERE id = ?", (artwork_id,))
+            conn.execute("DELETE FROM artworks WHERE id = ?", (artwork_id,))
+
+    if delete_cached_image:
+        _delete_cached_image(item.get("preview_path", ""))
+    return True
+
+
 def export_creative_seeds(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seeds: list[dict[str, Any]] = []
     for item in items:
@@ -347,3 +363,16 @@ def _loads(value: str, fallback: Any) -> Any:
 def _seed_meta(meta: dict[str, Any]) -> dict[str, Any]:
     keys = ("seed", "sampler", "steps", "cfgScale", "Size", "Model", "model")
     return {key: meta[key] for key in keys if key in meta}
+
+
+def _delete_cached_image(path_value: str) -> None:
+    if not path_value:
+        return
+    path = Path(path_value).resolve()
+    root = COLLECTION_DIR.resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return
+    if path.exists() and path.is_file():
+        path.unlink()

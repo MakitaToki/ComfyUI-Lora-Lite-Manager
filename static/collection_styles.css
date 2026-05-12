@@ -243,6 +243,16 @@ textarea:focus {
     font-weight: 750;
 }
 
+.button.danger {
+    color: #ffd6d6;
+    background: rgba(143, 42, 42, 0.24);
+    border-color: rgba(255, 123, 123, 0.48);
+}
+
+.button.danger:hover {
+    border-color: var(--danger);
+}
+
 .button.secondary:hover,
 .icon-button:hover,
 .button.primary:hover {
@@ -322,6 +332,11 @@ textarea:focus {
 #detailsBody {
     display: grid;
     gap: 14px;
+}
+
+.detail-actions {
+    display: flex;
+    gap: 10px;
 }
 
 .detail-section {

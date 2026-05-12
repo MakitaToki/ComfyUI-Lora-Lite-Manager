@@ -1,4 +1,4 @@
-import { addManualReference, collectionImageUrl, exportSeeds, fetchArtworks, fetchArtwork, importCivitaiUrl } from "./collection_api.js";
+import { addManualReference, collectionImageUrl, deleteArtwork, exportSeeds, fetchArtworks, fetchArtwork, importCivitaiUrl } from "./collection_api.js";
 
 const state = {
     items: [],
@@ -74,6 +74,9 @@ async function handleImport(event) {
         els.importUrl.value = "";
         showToast(result.count ? "图片已导入" : "没有找到这张图片");
         await loadItems();
+        if (result.items?.[0]?.id) {
+            await selectItem(result.items[0].id);
+        }
     } catch (error) {
         showToast(error.message, true);
     } finally {
@@ -219,6 +222,16 @@ function renderDetails(item, loading) {
     img.alt = firstTag(item) || item.source_id;
     els.detailsBody.append(img);
 
+    const actions = document.createElement("div");
+    actions.className = "detail-actions";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "button danger wide";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "删除这张作品";
+    deleteBtn.addEventListener("click", () => handleDelete(item));
+    actions.append(deleteBtn);
+    els.detailsBody.append(actions);
+
     els.detailsBody.append(section("素材类型", assetTypeLabel(item.asset_type)));
     els.detailsBody.append(generationSection(item));
     els.detailsBody.append(modelSection(item.model_refs || []));
@@ -229,6 +242,7 @@ function renderDetails(item, loading) {
     els.detailsBody.append(jsonSection("迁移规则", item.transfer || {}));
     els.detailsBody.append(section("备注", item.user_notes || "无"));
     els.detailsBody.append(tagSection(item.raw_tags || []));
+    els.detailsBody.append(metaDebugSection(item));
 
     const link = document.createElement("a");
     link.className = "button secondary wide";
@@ -238,6 +252,29 @@ function renderDetails(item, loading) {
     link.textContent = loading ? "正在补全详情..." : "打开来源";
     if (item.source_url || item.image_url) {
         els.detailsBody.append(link);
+    }
+}
+
+async function handleDelete(item) {
+    if (!item?.id) {
+        return;
+    }
+    if (!window.confirm(`删除 ${cardTitle(item)}？`)) {
+        return;
+    }
+    setBusy(true, "正在删除作品...");
+    try {
+        await deleteArtwork(item.id);
+        state.selectedId = "";
+        els.detailsTitle.textContent = "选择作品";
+        els.detailsBody.className = "details-empty";
+        els.detailsBody.textContent = "从左侧作品卡片开始。";
+        showToast("作品已删除");
+        await loadItems();
+    } catch (error) {
+        showToast(error.message, true);
+    } finally {
+        setBusy(false);
     }
 }
 
@@ -338,6 +375,15 @@ function generationSection(item) {
     }
     block.append(chips);
     return block;
+}
+
+function metaDebugSection(item) {
+    const meta = item.meta || {};
+    const keys = Object.keys(meta).filter((key) => key !== "generation");
+    if (!keys.length) {
+        return section("Civitai meta keys", "无");
+    }
+    return section("Civitai meta keys", keys.join(", "));
 }
 
 function renderStats(item) {

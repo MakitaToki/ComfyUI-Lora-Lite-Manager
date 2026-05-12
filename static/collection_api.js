@@ -32,6 +32,12 @@ export async function updateArtwork(id, payload) {
     }));
 }
 
+export async function deleteArtwork(id) {
+    return readJson(await fetch(`${BASE}/items/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+    }));
+}
+
 export async function fetchArtworks({ query = "", sort = "newest", limit = 60, offset = 0 } = {}) {
     const params = new URLSearchParams({ q: query, sort, limit, offset });
     return readJson(await fetch(`${BASE}/items?${params}`));

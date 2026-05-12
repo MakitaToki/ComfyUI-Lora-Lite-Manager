@@ -9,7 +9,7 @@ from aiohttp import web
 from ..config import PLUGIN_ROOT
 from .civitai_collector import CivitaiArtworkCollector
 from .manual import add_manual_reference
-from .storage import COLLECTION_DIR, export_creative_seeds, get_artwork, search_artworks, upsert_artwork
+from .storage import COLLECTION_DIR, delete_artwork, export_creative_seeds, get_artwork, search_artworks, upsert_artwork
 
 
 def register_collection_routes(routes: Any, app: web.Application) -> None:
@@ -19,6 +19,7 @@ def register_collection_routes(routes: Any, app: web.Application) -> None:
     routes.get("/api/lora-lite/collection/items")(list_collection)
     routes.get("/api/lora-lite/collection/items/{artwork_id}")(get_collection_item)
     routes.patch("/api/lora-lite/collection/items/{artwork_id}")(update_collection_item)
+    routes.delete("/api/lora-lite/collection/items/{artwork_id}")(delete_collection_item)
     routes.get("/api/lora-lite/collection/image")(collection_image)
     routes.post("/api/lora-lite/collection/export-seeds")(export_collection_seeds)
 
@@ -90,6 +91,14 @@ async def update_collection_item(request: web.Request) -> web.Response:
         if key in payload:
             item[key] = payload[key]
     return web.json_response({"success": True, "item": upsert_artwork(item)})
+
+
+async def delete_collection_item(request: web.Request) -> web.Response:
+    delete_cached_image = str(request.query.get("delete_cached_image", "") or "").lower() in {"1", "true", "yes"}
+    deleted = delete_artwork(request.match_info.get("artwork_id", ""), delete_cached_image=delete_cached_image)
+    if not deleted:
+        return web.json_response({"success": False, "error": "Artwork not found"}, status=404)
+    return web.json_response({"success": True})
 
 
 async def collection_image(request: web.Request) -> web.StreamResponse:
