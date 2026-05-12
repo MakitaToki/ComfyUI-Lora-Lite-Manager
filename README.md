@@ -11,6 +11,7 @@ A minimal ComfyUI plugin focused only on LoRA management.
 - Query Civitai by SHA256.
 - Download a Civitai model version into a LoRA folder.
 - Use explicit HTTP/HTTPS proxy settings for API and file downloads.
+- Build a lightweight Civitai artwork collection at `/collection-lite` for prompt/tag research.
 
 It intentionally does not include recipes, checkpoints, embeddings, randomizers, virtual scrolling, batch tools, or a full standalone app.
 
@@ -75,6 +76,11 @@ SOCKS proxies are intentionally rejected unless `aiohttp-socks` is installed and
 - `GET /api/lora-lite/civitai/by-hash/{sha256}`
 - `POST /api/lora-lite/metadata`
 - `POST /api/lora-lite/download`
+- `GET /collection-lite`
+- `POST /api/lora-lite/collection/import`
+- `GET /api/lora-lite/collection/items`
+- `GET /api/lora-lite/collection/items/{artwork_id}`
+- `POST /api/lora-lite/collection/export-seeds`
 
 Example download payload:
 

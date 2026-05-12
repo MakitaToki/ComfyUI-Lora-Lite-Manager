@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Collection Lite</title>
+    <link rel="stylesheet" href="/lora-lite-static/collection_styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <h1>Collection Lite</h1>
+            <p id="summary">正在读取作品集...</p>
+        </div>
+        <nav class="topbar-actions">
+            <a class="button secondary" href="/lora-lite">LoRA 管理</a>
+            <button id="refreshBtn" class="button secondary" type="button">刷新</button>
+            <button id="exportBtn" class="button primary" type="button">导出 Creative Seeds</button>
+        </nav>
+    </header>
+
+    <main class="layout">
+        <section class="content">
+            <form id="importForm" class="import-bar">
+                <label>
+                    <span>Civitai 图片 / 模型链接</span>
+                    <input id="importUrl" placeholder="https://civitai.com/images/123 或 https://civitai.com/models/456">
+                </label>
+                <label class="limit-field">
+                    <span>数量</span>
+                    <input id="importLimit" type="number" min="1" max="100" value="20">
+                </label>
+                <button class="button primary" type="submit">导入</button>
+            </form>
+
+            <div class="toolbar">
+                <label class="search-box">
+                    <span>搜索</span>
+                    <input id="searchInput" type="search" placeholder="raw tags、prompt、作者、模型名">
+                </label>
+                <label class="select-box">
+                    <span>排序</span>
+                    <select id="sortSelect">
+                        <option value="newest">发布时间新</option>
+                        <option value="popular">热度高</option>
+                        <option value="collected">收藏时间新</option>
+                        <option value="oldest">发布时间旧</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="grid" class="masonry" aria-live="polite"></div>
+            <div id="emptyState" class="empty" hidden>还没有作品。粘贴一条 Civitai 链接开始导入。</div>
+        </section>
+
+        <aside class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2 id="detailsTitle">选择作品</h2>
+                    <p>查看提示词、tags 和模型引用</p>
+                </div>
+            </div>
+            <div id="detailsBody" class="details-empty">从左侧作品卡片开始。</div>
+        </aside>
+    </main>
+
+    <section id="exportDialog" class="dialog" hidden>
+        <div class="dialog-card">
+            <div class="panel-header">
+                <div>
+                    <h2>Creative Seeds</h2>
+                    <p>这是给后续 OpenClaw 实验矩阵使用的结构化原料。</p>
+                </div>
+                <button id="closeExportBtn" class="icon-button" type="button" aria-label="关闭">x</button>
+            </div>
+            <textarea id="exportText" spellcheck="false"></textarea>
+        </div>
+    </section>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/lora-lite-static/collection_app.js"></script>
+</body>
+</html>
+

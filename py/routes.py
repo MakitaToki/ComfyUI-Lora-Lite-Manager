@@ -36,6 +36,10 @@ def register_routes() -> None:
     routes.post("/api/lora-lite/metadata")(update_metadata)
     routes.post("/api/lora-lite/download")(download_lora)
 
+    from .collection.routes import register_collection_routes
+
+    register_collection_routes(routes, app)
+
 
 async def lora_lite_page(request: web.Request) -> web.Response:
     html_path = PLUGIN_ROOT / "static" / "index.html"
