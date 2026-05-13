@@ -190,6 +190,13 @@ label span {
     font-size: 12px;
 }
 
+.field-hint {
+    margin: -4px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
 input,
 select,
 textarea {
