@@ -1,4 +1,4 @@
-import { addManualReference, collectionImageUrl, deleteArtwork, exportSeeds, fetchArtworks, fetchArtwork, importCivitaiUrl } from "./collection_api.js";
+import { addManualReference, collectionImageUrl, deleteArtwork, exportSeeds, fetchArtworks, fetchArtwork, importCivitaiUrl, updateArtwork } from "./collection_api.js";
 
 const state = {
     items: [],
@@ -235,7 +235,7 @@ function renderDetails(item, loading) {
     actions.append(deleteBtn);
     els.detailsBody.append(actions);
 
-    els.detailsBody.append(section("素材类型", assetTypeLabel(item.asset_type)));
+    els.detailsBody.append(assetTypeEditor(item));
     els.detailsBody.append(generationSection(item));
     els.detailsBody.append(modelSection(item.model_refs || []));
     els.detailsBody.append(section("正向提示词", item.positive_prompt || "无"));
@@ -305,6 +305,43 @@ function section(title, content) {
     block.append(textEl("h3", title));
     block.append(textEl("p", content));
     return block;
+}
+
+function assetTypeEditor(item) {
+    const block = document.createElement("section");
+    block.className = "detail-section";
+    block.append(textEl("h3", "素材类型"));
+
+    const select = document.createElement("select");
+    select.className = "detail-select";
+    for (const [value, label] of Object.entries(assetTypeOptions())) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.selected = value === item.asset_type;
+        select.append(option);
+    }
+    select.addEventListener("change", () => handleAssetTypeChange(item, select.value));
+    block.append(select);
+    return block;
+}
+
+async function handleAssetTypeChange(item, assetType) {
+    if (!item?.id || assetType === item.asset_type) {
+        return;
+    }
+    setBusy(true, "正在更新素材类型...");
+    try {
+        const result = await updateArtwork(item.id, { asset_type: assetType });
+        showToast("素材类型已更新");
+        await loadItems();
+        renderDetails(result.item, false);
+    } catch (error) {
+        showToast(error.message, true);
+        renderDetails(item, false);
+    } finally {
+        setBusy(false);
+    }
 }
 
 function jsonSection(title, value) {
@@ -428,11 +465,15 @@ function cardDescription(item) {
 }
 
 function assetTypeLabel(value) {
+    return assetTypeOptions()[value] || "参考素材";
+}
+
+function assetTypeOptions() {
     return {
         ai_generation_reference: "AI / 插画生成参考",
         photo_reference: "摄影参考",
         graphic_design_reference: "平面设计参考",
-    }[value] || "参考素材";
+    };
 }
 
 function splitTags(value) {
