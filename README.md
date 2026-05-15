@@ -5,6 +5,7 @@ A minimal ComfyUI plugin focused only on LoRA management.
 ## Scope
 
 - Scan LoRA folders from ComfyUI `folder_paths`.
+- Provide a small `LoRA Lite Loader` ComfyUI node for API-driven experiment workflows.
 - Browse and search local LoRA files in a lightweight `/lora-lite` page.
 - Read and write `.metadata.json` sidecar files.
 - Calculate SHA256 on demand.
@@ -13,6 +14,7 @@ A minimal ComfyUI plugin focused only on LoRA management.
 - Use explicit HTTP/HTTPS proxy settings for API and file downloads.
 - Build a lightweight Civitai artwork collection at `/collection-lite` for prompt/tag research.
 - Add manual visual references from image URLs or local image paths, with separate asset types for AI generation, photography, and graphic design references.
+- Export first-pass experiment cases from collection items, and run ready cases through an `Advanced_V34` ComfyUI API workflow.
 
 It intentionally does not include recipes, checkpoints, embeddings, randomizers, virtual scrolling, batch tools, or a full standalone app.
 
@@ -84,6 +86,7 @@ SOCKS proxies are intentionally rejected unless `aiohttp-socks` is installed and
 - `GET /api/lora-lite/collection/items/{artwork_id}`
 - `PATCH /api/lora-lite/collection/items/{artwork_id}`
 - `POST /api/lora-lite/collection/export-seeds`
+- `POST /api/lora-lite/experiments/cases`
 
 Example download payload:
 
@@ -92,4 +95,59 @@ Example download payload:
   "model_version_id": 123456,
   "relative_dir": "SDXL/character"
 }
+```
+
+## Experiment Matrix
+
+The first experiment matrix format is intentionally conservative:
+
+- Civitai images or any item with an AI-ready `positive_prompt` become `ready` cases.
+- Pinterest, Xiaohongshu, and local visual references without an AI-ready prompt become `draft` cases.
+- Draft cases keep `visual_structure`, `design_language`, transfer rules, and notes as `style_notes`; those notes are not sent to ComfyUI.
+- The runner skips draft cases unless `--include-draft` is passed.
+- The runner patches `Advanced_V34` node `56` to `LoraLiteLoader` by default, so it does not require the original LoRA Manager node.
+
+Export cases from the local collection:
+
+```powershell
+python tools\run_advanced_v34_experiment.py --from-collection --limit 3
+```
+
+Patch and save Advanced_V34 workflow JSON without submitting:
+
+```powershell
+python tools\run_advanced_v34_experiment.py `
+  --from-collection `
+  --limit 3 `
+  --output-dir data\experiments\patched
+```
+
+Submit ready cases to ComfyUI:
+
+```powershell
+python tools\run_advanced_v34_experiment.py `
+  --from-collection `
+  --limit 1 `
+  --workflow "C:\Users\Administrator\Downloads\Advanced_V34.json" `
+  --comfyui-url http://127.0.0.1:8188 `
+  --submit `
+  --wait
+```
+
+Keep the original LoRA Manager node for comparison:
+
+```powershell
+python tools\run_advanced_v34_experiment.py `
+  --from-collection `
+  --lora-node original `
+  --submit
+```
+
+Override LoRAs explicitly:
+
+```powershell
+python tools\run_advanced_v34_experiment.py `
+  --from-collection `
+  --lora "BlueArcStyle.safetensors:0.7" `
+  --submit
 ```

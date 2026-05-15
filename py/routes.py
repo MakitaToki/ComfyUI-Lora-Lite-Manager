@@ -40,6 +40,10 @@ def register_routes() -> None:
 
     register_collection_routes(routes, app)
 
+    from .experiment.routes import register_experiment_routes
+
+    register_experiment_routes(routes, app)
+
 
 async def lora_lite_page(request: web.Request) -> web.Response:
     html_path = PLUGIN_ROOT / "static" / "index.html"
