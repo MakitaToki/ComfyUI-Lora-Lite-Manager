@@ -105,7 +105,8 @@ The first experiment matrix format is intentionally conservative:
 - Pinterest, Xiaohongshu, and local visual references without an AI-ready prompt become `draft` cases.
 - Draft cases keep `visual_structure`, `design_language`, transfer rules, and notes as `style_notes`; those notes are not sent to ComfyUI.
 - The runner skips draft cases unless `--include-draft` is passed.
-- The runner patches `Advanced_V34` node `56` to `LoraLiteLoader` by default, so it does not require the original LoRA Manager node.
+- The default runner workflow is `workflows/lora_lite_base_api.json`, a minimal API workflow built around `LoraLiteLoader`.
+- Passing an `Advanced_V34` API workflow is still supported for comparison; node `56` is patched to `LoraLiteLoader` by default.
 
 Export cases from the local collection:
 
@@ -122,16 +123,25 @@ python tools\run_advanced_v34_experiment.py `
   --output-dir data\experiments\patched
 ```
 
-Submit ready cases to ComfyUI:
+Submit ready cases to ComfyUI with the minimal base workflow:
+
+```powershell
+python tools\run_advanced_v34_experiment.py `
+  --from-collection `
+  --limit 1 `
+  --comfyui-url http://127.0.0.1:8188 `
+  --submit `
+  --wait
+```
+
+Run against an Advanced_V34 API workflow instead:
 
 ```powershell
 python tools\run_advanced_v34_experiment.py `
   --from-collection `
   --limit 1 `
   --workflow "C:\Users\Administrator\Downloads\Advanced_V34.json" `
-  --comfyui-url http://127.0.0.1:8188 `
-  --submit `
-  --wait
+  --submit
 ```
 
 Keep the original LoRA Manager node for comparison:

@@ -12,8 +12,28 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_WORKFLOW = Path(r"C:\Users\Administrator\Downloads\Advanced_V34.json")
+DEFAULT_WORKFLOW = REPO_ROOT / "workflows" / "lora_lite_base_api.json"
 DEFAULT_COMFYUI_URL = "http://127.0.0.1:8188"
+
+
+BASE_BINDINGS = {
+    "positive_prompt": ("4", "text"),
+    "negative_prompt": ("5", "text"),
+    "lora_text": ("3", "text"),
+    "lora_widget": ("3", "loras"),
+    "steps": ("7", "steps"),
+    "cfg": ("7", "cfg"),
+    "sampler": ("7", "sampler_name"),
+    "scheduler": ("7", "scheduler"),
+    "denoise": ("7", "denoise"),
+    "width": ("6", "width"),
+    "height": ("6", "height"),
+    "batch_size": ("6", "batch_size"),
+    "checkpoint": ("1", "ckpt_name"),
+    "seed": ("7", "seed"),
+    "clip_skip": ("2", "stop_at_clip_layer"),
+    "save_filename": ("9", "filename_prefix"),
+}
 
 
 ADVANCED_V34_BINDINGS = {
@@ -62,7 +82,7 @@ def main() -> int:
 
     submitted = []
     for case in ready_cases:
-        patched = patch_advanced_v34_workflow(workflow, case, save_path=args.save_path, lora_node=args.lora_node)
+        patched = patch_workflow(workflow, case, save_path=args.save_path, lora_node=args.lora_node)
         if output_dir:
             path = output_dir / f"{case['case_id']}.json"
             path.write_text(json.dumps(patched, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -84,7 +104,7 @@ def main() -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run LoRA Lite experiment cases through Advanced_V34 ComfyUI workflow.")
+    parser = argparse.ArgumentParser(description="Run LoRA Lite experiment cases through a ComfyUI API workflow.")
     parser.add_argument("--workflow", type=Path, default=DEFAULT_WORKFLOW, help="ComfyUI API workflow JSON path.")
     parser.add_argument("--cases", type=Path, help="Experiment cases JSON exported from LoRA Lite Manager.")
     parser.add_argument("--from-collection", action="store_true", help="Build cases from the local collection SQLite database.")
@@ -131,7 +151,7 @@ def load_cases(args: argparse.Namespace) -> Any:
     raise SystemExit("Use --cases FILE or --from-collection.")
 
 
-def patch_advanced_v34_workflow(
+def patch_workflow(
     base_workflow: dict[str, Any],
     case: dict[str, Any],
     *,
@@ -139,39 +159,56 @@ def patch_advanced_v34_workflow(
     lora_node: str = "lite",
 ) -> dict[str, Any]:
     workflow = json.loads(json.dumps(base_workflow))
+    bindings = detect_bindings(workflow)
     prompt = case.get("prompt", {})
     models = case.get("models", {})
     generation = case.get("generation", {})
     output = case.get("output", {})
     loras = [lora for lora in models.get("loras", []) if lora.get("active", True)]
 
-    if lora_node == "lite":
+    if lora_node == "lite" and bindings is ADVANCED_V34_BINDINGS:
         configure_lora_lite_node(workflow)
 
-    set_input(workflow, "positive_prompt", prompt.get("positive", ""))
-    set_input(workflow, "positive_populated", prompt.get("positive", ""))
-    set_input(workflow, "negative_prompt", prompt.get("negative", ""))
-    set_input(workflow, "negative_populated", prompt.get("negative", ""))
-    set_input(workflow, "lora_text", lora_syntax(loras))
-    set_input(workflow, "lora_widget", {"__value__": loras})
-    set_input(workflow, "steps", generation.get("steps", 28))
-    set_input(workflow, "cfg", generation.get("cfg", 6))
-    set_input(workflow, "sampler", generation.get("sampler", "euler_ancestral"))
-    set_input(workflow, "scheduler", generation.get("scheduler", "normal"))
-    set_input(workflow, "denoise", generation.get("denoise", 1))
-    set_input(workflow, "width", generation.get("width", 1024))
-    set_input(workflow, "height", generation.get("height", 1536))
-    set_input(workflow, "batch_size", generation.get("batch_size", 1))
+    set_input(workflow, bindings, "positive_prompt", prompt.get("positive", ""))
+    set_input(workflow, bindings, "negative_prompt", prompt.get("negative", ""))
+    set_optional_input(workflow, bindings, "positive_populated", prompt.get("positive", ""))
+    set_optional_input(workflow, bindings, "negative_populated", prompt.get("negative", ""))
+    set_input(workflow, bindings, "lora_text", lora_syntax(loras))
+    set_input(workflow, bindings, "lora_widget", {"__value__": loras})
+    set_input(workflow, bindings, "steps", generation.get("steps", 28))
+    set_input(workflow, bindings, "cfg", generation.get("cfg", 6))
+    set_input(workflow, bindings, "sampler", generation.get("sampler", "euler_ancestral"))
+    set_input(workflow, bindings, "scheduler", generation.get("scheduler", "normal"))
+    set_input(workflow, bindings, "denoise", generation.get("denoise", 1))
+    set_input(workflow, bindings, "width", generation.get("width", 1024))
+    set_input(workflow, bindings, "height", generation.get("height", 1536))
+    set_input(workflow, bindings, "batch_size", generation.get("batch_size", 1))
     if models.get("checkpoint"):
-        set_input(workflow, "checkpoint", models["checkpoint"])
-    set_input(workflow, "seed", generation.get("seed", -1))
+        set_input(workflow, bindings, "checkpoint", models["checkpoint"])
+    set_input(workflow, bindings, "seed", generation.get("seed", -1))
     clip_skip = int(generation.get("clip_skip", 2) or 2)
-    set_input(workflow, "clip_skip", -abs(clip_skip))
-    set_input(workflow, "save_clip_skip", clip_skip)
-    set_input(workflow, "save_filename", output.get("filename_prefix") or case.get("case_id", "lora_lite_exp"))
+    set_input(workflow, bindings, "clip_skip", -abs(clip_skip))
+    set_optional_input(workflow, bindings, "save_clip_skip", clip_skip)
+    set_input(workflow, bindings, "save_filename", output.get("filename_prefix") or case.get("case_id", "lora_lite_exp"))
     if save_path:
-        set_input(workflow, "save_path", save_path)
+        set_optional_input(workflow, bindings, "save_path", save_path)
     return workflow
+
+
+def patch_advanced_v34_workflow(
+    base_workflow: dict[str, Any],
+    case: dict[str, Any],
+    *,
+    save_path: str = "",
+    lora_node: str = "lite",
+) -> dict[str, Any]:
+    return patch_workflow(base_workflow, case, save_path=save_path, lora_node=lora_node)
+
+
+def detect_bindings(workflow: dict[str, Any]) -> dict[str, tuple[str, str]]:
+    if workflow.get("3", {}).get("class_type") == "LoraLiteLoader":
+        return BASE_BINDINGS
+    return ADVANCED_V34_BINDINGS
 
 
 def configure_lora_lite_node(workflow: dict[str, Any]) -> None:
@@ -182,12 +219,22 @@ def configure_lora_lite_node(workflow: dict[str, Any]) -> None:
     node["_meta"] = {"title": "LoRA Lite Loader"}
 
 
-def set_input(workflow: dict[str, Any], binding_name: str, value: Any) -> None:
-    node_id, input_name = ADVANCED_V34_BINDINGS[binding_name]
+def set_input(workflow: dict[str, Any], bindings: dict[str, tuple[str, str]], binding_name: str, value: Any) -> None:
+    node_id, input_name = bindings[binding_name]
     node = workflow.get(node_id)
     if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
         raise KeyError(f"Workflow node {node_id} for {binding_name} not found.")
     node["inputs"][input_name] = value
+
+
+def set_optional_input(
+    workflow: dict[str, Any],
+    bindings: dict[str, tuple[str, str]],
+    binding_name: str,
+    value: Any,
+) -> None:
+    if binding_name in bindings:
+        set_input(workflow, bindings, binding_name, value)
 
 
 def lora_syntax(loras: list[dict[str, Any]]) -> str:
