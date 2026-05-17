@@ -9,7 +9,7 @@ from aiohttp import web
 from .civitai import CIVITAI_DOWNLOAD_PREFIX, CivitaiClient, normalize_download_url, select_model_file
 from .config import PLUGIN_ROOT, get_default_lora_root, get_lora_roots, load_config, read_settings, write_settings
 from .downloader import Downloader
-from .metadata import calculate_sha256, load_metadata, normalize_path, save_metadata
+from .metadata import PREVIEW_EXTENSIONS, calculate_sha256, load_metadata, metadata_path_for, normalize_path, save_metadata
 from .scanner import find_lora_by_path, scan_loras
 
 
@@ -24,6 +24,7 @@ def register_routes() -> None:
     _add_static_route(app, "/lora-lite-static", PLUGIN_ROOT / "static")
 
     routes.get("/lora-lite")(lora_lite_page)
+    routes.get("/recipe-lite")(recipe_lite_page)
     routes.get("/api/lora-lite/roots")(get_roots)
     routes.get("/api/lora-lite/settings")(get_settings)
     routes.post("/api/lora-lite/settings")(update_settings)
@@ -34,6 +35,7 @@ def register_routes() -> None:
     routes.get("/api/lora-lite/preview")(preview_file)
     routes.get("/api/lora-lite/civitai/by-hash/{sha256}")(civitai_by_hash)
     routes.post("/api/lora-lite/metadata")(update_metadata)
+    routes.post("/api/lora-lite/delete")(delete_lora)
     routes.post("/api/lora-lite/download")(download_lora)
 
     from .collection.routes import register_collection_routes
@@ -47,6 +49,11 @@ def register_routes() -> None:
 
 async def lora_lite_page(request: web.Request) -> web.Response:
     html_path = PLUGIN_ROOT / "static" / "index.html"
+    return web.FileResponse(html_path)
+
+
+async def recipe_lite_page(request: web.Request) -> web.Response:
+    html_path = PLUGIN_ROOT / "static" / "recipe.html"
     return web.FileResponse(html_path)
 
 
@@ -156,6 +163,34 @@ async def update_metadata(request: web.Request) -> web.Response:
     return web.json_response({"success": True, "metadata": load_metadata(record["file_path"])})
 
 
+async def delete_lora(request: web.Request) -> web.Response:
+    payload = await _read_json(request)
+    file_path = str(payload.get("file_path", "") or "")
+    record = find_lora_by_path(file_path)
+    if record is None:
+        return web.json_response({"success": False, "error": "LoRA file not found"}, status=404)
+
+    model_path = Path(record["file_path"]).resolve()
+    allowed_roots = [Path(root).resolve() for root in get_lora_roots()]
+    if not any(_is_relative_to(model_path, root) for root in allowed_roots):
+        return web.json_response({"success": False, "error": "LoRA file is outside configured roots"}, status=403)
+
+    deleted: list[str] = []
+    failed: list[dict[str, str]] = []
+    for path in _delete_candidates(model_path):
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            path.unlink()
+            deleted.append(normalize_path(path))
+        except OSError as exc:
+            failed.append({"path": normalize_path(path), "error": str(exc)})
+
+    if failed:
+        return web.json_response({"success": False, "deleted": deleted, "failed": failed}, status=500)
+    return web.json_response({"success": True, "deleted": deleted})
+
+
 async def download_lora(request: web.Request) -> web.Response:
     payload = await _read_json(request)
     model_version_id = payload.get("model_version_id")
@@ -217,6 +252,12 @@ def _unique_path(path: Path) -> Path:
         index += 1
 
 
+def _delete_candidates(model_path: Path) -> list[Path]:
+    candidates = [model_path, metadata_path_for(model_path)]
+    candidates.extend(model_path.with_suffix(extension) for extension in PREVIEW_EXTENSIONS)
+    return list(dict.fromkeys(candidates))
+
+
 def _add_static_route(app: web.Application, prefix: str, path: Path) -> None:
     if not path.exists():
         return
@@ -247,6 +288,10 @@ def _metadata_from_version(version: dict[str, Any], file_info: dict[str, Any], f
     hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
     trained_words = version.get("trainedWords")
     images = version.get("images")
+    model_id = model.get("id")
+    model_version_id = version.get("id")
+    model_page_url = f"https://civitai.com/models/{model_id}?modelVersionId={model_version_id}" if model_id and model_version_id else ""
+    download_url = normalize_download_url(str(file_info.get("downloadUrl") or f"{CIVITAI_DOWNLOAD_PREFIX}{model_version_id}")) if model_version_id else ""
 
     return {
         "model_name": model.get("name") or version.get("name") or Path(file_path).stem,
@@ -258,9 +303,13 @@ def _metadata_from_version(version: dict[str, Any], file_info: dict[str, Any], f
         "trained_words": trained_words if isinstance(trained_words, list) else [],
         "notes": "",
         "preview_url": "",
+        "source_url": model_page_url,
+        "download_url": download_url,
         "civitai": {
-            "modelId": model.get("id"),
-            "modelVersionId": version.get("id"),
+            "modelId": model_id,
+            "modelVersionId": model_version_id,
+            "modelPageUrl": model_page_url,
+            "downloadUrl": download_url,
             "model": model,
             "version": version,
             "file": file_info,

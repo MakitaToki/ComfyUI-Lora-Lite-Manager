@@ -87,6 +87,11 @@ SOCKS proxies are intentionally rejected unless `aiohttp-socks` is installed and
 - `PATCH /api/lora-lite/collection/items/{artwork_id}`
 - `POST /api/lora-lite/collection/export-seeds`
 - `POST /api/lora-lite/experiments/cases`
+- `POST /api/lora-lite/experiments/preview`
+- `POST /api/lora-lite/experiments/runs`
+- `GET /api/lora-lite/experiments/runs`
+- `GET /api/lora-lite/experiments/runs/{run_id}`
+- `POST /api/lora-lite/experiments/runs/{run_id}/refresh`
 
 Example download payload:
 
@@ -107,6 +112,9 @@ The first experiment matrix format is intentionally conservative:
 - The runner skips draft cases unless `--include-draft` is passed.
 - The default runner workflow is `workflows/lora_lite_base_api.json`, a minimal API workflow built around `LoraLiteLoader`.
 - Passing an `Advanced_V34` API workflow is still supported for comparison; node `56` is patched to `LoraLiteLoader` by default.
+- Recipe Lite's experiment workspace expands preview cases as `prompt variant x LoRA combo x strength x seed`.
+- LoRA combos include baseline, each single LoRA, and every two-LoRA pair. Pair members share the same strength value for each sweep step.
+- Experiment runs are saved locally under `data/experiments` and can be refreshed from ComfyUI history.
 
 Export cases from the local collection:
 

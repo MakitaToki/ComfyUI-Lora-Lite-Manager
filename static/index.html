@@ -7,13 +7,21 @@
     <link rel="stylesheet" href="/lora-lite-static/styles.css">
 </head>
 <body>
-    <header class="topbar">
-        <div>
-            <h1>LoRA Lite Manager</h1>
-            <p id="summary">正在读取本地 LoRA...</p>
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-mark">L</div>
+            <div>
+                <h1>LoRA Lite Manager</h1>
+                <p id="summary">正在读取本地 LoRA...</p>
+            </div>
         </div>
+        <nav class="main-tabs" aria-label="主菜单">
+            <a class="tab active" href="/lora-lite">LoRA</a>
+            <a class="tab" href="/collection-lite">作品集</a>
+            <a class="tab" href="/lora-lite-static/recipe.html">Recipe</a>
+            <a class="tab" href="/experiments-lite">Experiment</a>
+        </nav>
         <div class="topbar-actions">
-            <a class="button secondary" href="/collection-lite">作品集</a>
             <button id="settingsBtn" class="icon-button" type="button" aria-label="设置" title="设置">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path>
@@ -50,7 +58,6 @@
                     <p id="detailsPath">查看和编辑元数据</p>
                 </div>
             </div>
-
             <div id="detailsBody" class="details-empty">
                 从左侧选择一张卡片，或者先点击刷新扫描本地模型。
             </div>

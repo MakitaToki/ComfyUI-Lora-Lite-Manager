@@ -31,12 +31,14 @@ textarea {
     font: inherit;
 }
 
+.app-header,
 .topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    padding: 18px 24px;
+    min-height: 76px;
+    padding: 14px 24px;
     border-bottom: 1px solid var(--line);
     background: rgba(25, 29, 36, 0.96);
     position: sticky;
@@ -44,7 +46,62 @@ textarea {
     z-index: 5;
 }
 
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 260px;
+}
+
+.brand-mark {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    color: #071014;
+    background: var(--accent);
+    font-weight: 800;
+}
+
+.main-tabs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 1;
+}
+
+.tab {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--muted);
+    text-decoration: none;
+    font-weight: 650;
+}
+
+.tab:hover {
+    color: var(--text);
+    background: var(--surface-2);
+}
+
+.tab.active {
+    color: #071014;
+    background: var(--accent);
+}
+
+.tab.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
 .topbar h1,
+.app-header h1,
 .panel h2,
 .drawer h2 {
     margin: 0;
@@ -53,6 +110,7 @@ textarea {
 }
 
 .topbar p,
+.app-header p,
 .panel p,
 .drawer p {
     margin: 6px 0 0;
@@ -97,6 +155,17 @@ textarea {
 .button.secondary:hover,
 .icon-button:hover {
     border-color: var(--accent);
+}
+
+.button.danger {
+    border-color: rgba(255, 122, 122, 0.42);
+    color: #ffd3d3;
+    background: rgba(255, 122, 122, 0.1);
+}
+
+.button.danger:hover {
+    border-color: var(--danger);
+    background: rgba(255, 122, 122, 0.18);
 }
 
 .button:disabled {
@@ -237,6 +306,10 @@ textarea:focus {
     overflow-wrap: anywhere;
 }
 
+.card .note-preview {
+    color: #d7e2ed;
+}
+
 .meta-row,
 .chips {
     display: flex;
@@ -321,6 +394,39 @@ textarea:focus {
     overflow-wrap: anywhere;
 }
 
+.link-panel {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #0f1217;
+}
+
+.link-panel strong {
+    font-size: 13px;
+}
+
+.link-panel a,
+.link-panel span {
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+
+.link-panel a {
+    color: var(--accent-strong);
+    text-decoration: none;
+}
+
+.link-panel a:hover {
+    text-decoration: underline;
+}
+
+.link-panel span {
+    color: var(--muted);
+}
+
 .form {
     display: grid;
     gap: 12px;
@@ -392,9 +498,20 @@ textarea:focus {
 }
 
 @media (max-width: 680px) {
-    .topbar {
+    .topbar,
+    .app-header {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .brand {
+        min-width: 0;
+    }
+
+    .main-tabs {
+        justify-content: flex-start;
+        overflow-x: auto;
+        width: 100%;
     }
 
     .toolbar {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import sys
 import time
@@ -13,7 +14,8 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKFLOW = REPO_ROOT / "workflows" / "lora_lite_base_api.json"
-DEFAULT_COMFYUI_URL = "http://127.0.0.1:8188"
+DEFAULT_COMFYUI_URL = "http://127.0.0.1:8000"
+DEFAULT_RUNS_DIR = REPO_ROOT / "data" / "experiments" / "runs"
 
 
 BASE_BINDINGS = {
@@ -68,7 +70,9 @@ def main() -> int:
     if not isinstance(cases, list):
         raise SystemExit("Cases payload must be a list or an object with a cases list.")
 
-    ready_cases = [case for case in cases if args.include_draft or case.get("compile_status") == "ready"]
+    overrides = generation_overrides(args)
+    ready_cases = [apply_case_overrides(case, args, overrides) for case in cases]
+    ready_cases = [case for case in ready_cases if args.include_draft or case.get("compile_status") == "ready"]
     if args.limit:
         ready_cases = ready_cases[: args.limit]
 
@@ -76,23 +80,35 @@ def main() -> int:
         print("No runnable cases. Visual references without compiled prompts are draft by default.")
         return 1
 
-    output_dir = Path(args.output_dir) if args.output_dir else None
+    run_dir = create_run_dir(args) if args.submit or args.record else None
+    output_dir = Path(args.output_dir) if args.output_dir else (run_dir / "workflows" if run_dir else None)
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
+    if run_dir:
+        write_json(run_dir / "cases.json", {"format": "lora_lite_experiment_cases.v1", "cases": ready_cases})
+        write_json(run_dir / "manifest.json", run_manifest(args, ready_cases))
 
     submitted = []
     for case in ready_cases:
         patched = patch_workflow(workflow, case, save_path=args.save_path, lora_node=args.lora_node)
         if output_dir:
             path = output_dir / f"{case['case_id']}.json"
-            path.write_text(json.dumps(patched, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json(path, patched)
 
         if args.submit:
             prompt_id = submit_prompt(args.comfyui_url, patched)
-            submitted.append({"case_id": case["case_id"], "prompt_id": prompt_id})
+            submission = {"case_id": case["case_id"], "prompt_id": prompt_id}
+            submitted.append(submission)
+            if run_dir:
+                write_json(run_dir / "submissions.json", {"submitted": submitted})
             print(f"submitted {case['case_id']} -> {prompt_id}")
             if args.wait:
-                wait_for_history(args.comfyui_url, prompt_id)
+                history = wait_for_history(args.comfyui_url, prompt_id)
+                if run_dir:
+                    write_json(run_dir / "history" / f"{case['case_id']}_{prompt_id}.json", history)
+                    submission["history_file"] = str((run_dir / "history" / f"{case['case_id']}_{prompt_id}.json").relative_to(run_dir))
+                    submission["outputs"] = outputs_from_history(history)
+                    write_json(run_dir / "submissions.json", {"submitted": submitted})
                 print(f"completed {case['case_id']} -> {prompt_id}")
         else:
             positive = case.get("prompt", {}).get("positive", "")
@@ -100,6 +116,8 @@ def main() -> int:
 
     if submitted:
         print(json.dumps({"submitted": submitted}, ensure_ascii=False, indent=2))
+    if run_dir:
+        print(f"recorded run: {run_dir}")
     return 0
 
 
@@ -115,9 +133,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", default="", help="Override checkpoint name.")
     parser.add_argument("--lora", action="append", default=[], help="LoRA override: name[:strength[:clipStrength]]. Can be repeated.")
     parser.add_argument("--use-source-loras", action="store_true", help="Use LoRA refs parsed from Civitai metadata when no --lora is set.")
+    parser.add_argument("--ignore-source-generation", action="store_true", help="Use only CLI/default generation settings instead of Civitai source size/steps/seed.")
+    parser.add_argument("--steps", type=int, help="Override sampler steps.")
+    parser.add_argument("--cfg", type=float, help="Override CFG scale.")
+    parser.add_argument("--width", type=int, help="Override latent width.")
+    parser.add_argument("--height", type=int, help="Override latent height.")
+    parser.add_argument("--seed", type=int, help="Override sampler seed.")
+    parser.add_argument("--sampler", help="Override sampler name.")
+    parser.add_argument("--scheduler", help="Override scheduler.")
+    parser.add_argument("--clip-skip", type=int, help="Override CLIP skip value, for example 2 becomes stop_at_clip_layer -2.")
+    parser.add_argument("--batch-size", type=int, help="Override latent batch size.")
     parser.add_argument("--include-draft", action="store_true", help="Run draft visual-reference cases too.")
     parser.add_argument("--limit", type=int, default=0, help="Max runnable cases to process.")
     parser.add_argument("--output-dir", default="", help="Optional directory to save patched workflow JSON files.")
+    parser.add_argument("--run-dir", default="", help="Directory for experiment records. Defaults to data/experiments/runs/<timestamp> when submitting.")
+    parser.add_argument("--record", action="store_true", help="Write cases and patched workflows even for dry-runs.")
     parser.add_argument("--save-path", default="", help="Optional Image Saver output path inside ComfyUI.")
     parser.add_argument(
         "--lora-node",
@@ -146,9 +176,41 @@ def load_cases(args: argparse.Namespace) -> Any:
             checkpoint=args.checkpoint,
             loras=[parse_lora_spec(value) for value in args.lora],
             use_source_loras=args.use_source_loras,
+            generation_defaults=generation_overrides(args),
+            use_source_generation=not args.ignore_source_generation,
         )
         return {"format": "lora_lite_experiment_cases.v1", "cases": cases}
     raise SystemExit("Use --cases FILE or --from-collection.")
+
+
+def generation_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    values = {
+        "steps": args.steps,
+        "cfg": args.cfg,
+        "width": args.width,
+        "height": args.height,
+        "seed": args.seed,
+        "sampler": args.sampler,
+        "scheduler": args.scheduler,
+        "clip_skip": args.clip_skip,
+        "batch_size": args.batch_size,
+    }
+    return {key: value for key, value in values.items() if value is not None and value != ""}
+
+
+def apply_case_overrides(
+    case: dict[str, Any],
+    args: argparse.Namespace,
+    generation: dict[str, Any],
+) -> dict[str, Any]:
+    updated = json.loads(json.dumps(case))
+    if generation:
+        updated.setdefault("generation", {}).update(generation)
+    if args.checkpoint:
+        updated.setdefault("models", {})["checkpoint"] = args.checkpoint
+    if args.lora:
+        updated.setdefault("models", {})["loras"] = [parse_lora_spec(value) for value in args.lora]
+    return updated
 
 
 def patch_workflow(
@@ -266,8 +328,12 @@ def submit_prompt(comfyui_url: str, workflow: dict[str, Any]) -> str:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        result = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"ComfyUI /prompt failed with HTTP {exc.code}: {body}") from exc
     prompt_id = result.get("prompt_id")
     if not prompt_id:
         raise RuntimeError(f"ComfyUI did not return prompt_id: {result}")
@@ -290,8 +356,56 @@ def wait_for_history(comfyui_url: str, prompt_id: str, *, timeout: int = 1800, i
     raise TimeoutError(f"Timed out waiting for prompt {prompt_id}")
 
 
+def create_run_dir(args: argparse.Namespace) -> Path:
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+    else:
+        run_dir = DEFAULT_RUNS_DIR / datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "history").mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def run_manifest(args: argparse.Namespace, cases: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "format": "lora_lite_experiment_run.v1",
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "workflow": str(args.workflow),
+        "comfyui_url": args.comfyui_url,
+        "submit": bool(args.submit),
+        "wait": bool(args.wait),
+        "case_count": len(cases),
+        "ready_count": sum(1 for case in cases if case.get("compile_status") == "ready"),
+        "generation_overrides": generation_overrides(args),
+        "checkpoint": args.checkpoint,
+        "loras": [parse_lora_spec(value) for value in args.lora],
+        "use_source_loras": bool(args.use_source_loras),
+        "ignore_source_generation": bool(args.ignore_source_generation),
+    }
+
+
+def outputs_from_history(history: dict[str, Any]) -> list[dict[str, Any]]:
+    outputs: list[dict[str, Any]] = []
+    for node_output in history.get("outputs", {}).values():
+        for image in node_output.get("images", []):
+            if isinstance(image, dict):
+                outputs.append(
+                    {
+                        "filename": image.get("filename", ""),
+                        "subfolder": image.get("subfolder", ""),
+                        "type": image.get("type", ""),
+                    }
+                )
+    return outputs
+
+
 def read_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

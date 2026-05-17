@@ -7,10 +7,24 @@ from aiohttp import web
 
 from ..collection.storage import get_artwork, search_artworks
 from .matrix import build_experiment_cases
+from .service import build_experiment_preview, create_run, get_run, list_runs, refresh_run
 
 
 def register_experiment_routes(routes: Any, app: web.Application) -> None:
+    routes.get("/experiments-lite")(experiments_page)
     routes.post("/api/lora-lite/experiments/cases")(export_experiment_cases)
+    routes.post("/api/lora-lite/experiments/preview")(preview_experiment)
+    routes.post("/api/lora-lite/experiments/runs")(create_experiment_run)
+    routes.get("/api/lora-lite/experiments/runs")(list_experiment_runs)
+    routes.get("/api/lora-lite/experiments/runs/{run_id}")(get_experiment_run)
+    routes.post("/api/lora-lite/experiments/runs/{run_id}/refresh")(refresh_experiment_run)
+
+
+async def experiments_page(request: web.Request) -> web.Response:
+    from ..config import PLUGIN_ROOT
+
+    html_path = PLUGIN_ROOT / "static" / "experiments.html"
+    return web.FileResponse(html_path)
 
 
 async def export_experiment_cases(request: web.Request) -> web.Response:
@@ -34,7 +48,46 @@ async def export_experiment_cases(request: web.Request) -> web.Response:
         loras=payload.get("loras") if isinstance(payload.get("loras"), list) else None,
         use_source_loras=bool(payload.get("use_source_loras", False)),
         generation_defaults=payload.get("generation_defaults") if isinstance(payload.get("generation_defaults"), dict) else None,
+        use_source_generation=bool(payload.get("use_source_generation", True)),
     )
+
+
+async def preview_experiment(request: web.Request) -> web.Response:
+    payload = await _read_json(request)
+    recipe = payload.get("recipe") if isinstance(payload.get("recipe"), dict) else payload
+    preview = build_experiment_preview(recipe)
+    return web.json_response({"success": True, "preview": preview}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
+
+
+async def create_experiment_run(request: web.Request) -> web.Response:
+    payload = await _read_json(request)
+    recipe = payload.get("recipe") if isinstance(payload.get("recipe"), dict) else {}
+    comfyui_url = str(payload.get("comfyui_url") or _origin_url(request) or "http://127.0.0.1:8188")
+    submit = bool(payload.get("submit", True))
+    try:
+        run = create_run(recipe, comfyui_url=comfyui_url, submit=submit)
+        return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
+    except Exception as exc:
+        return web.json_response({"success": False, "error": str(exc)}, status=502)
+
+
+async def list_experiment_runs(request: web.Request) -> web.Response:
+    limit = int(request.query.get("limit", 50) or 50)
+    return web.json_response({"success": True, "runs": list_runs(limit=limit)}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
+
+
+async def get_experiment_run(request: web.Request) -> web.Response:
+    run = get_run(request.match_info.get("run_id", ""))
+    if run is None:
+        return web.json_response({"success": False, "error": "Experiment run not found"}, status=404)
+    return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
+
+
+async def refresh_experiment_run(request: web.Request) -> web.Response:
+    run = refresh_run(request.match_info.get("run_id", ""))
+    if run is None:
+        return web.json_response({"success": False, "error": "Experiment run not found"}, status=404)
+    return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
     return web.json_response(
         {
             "success": True,
@@ -56,3 +109,9 @@ async def _read_json(request: web.Request) -> dict[str, Any]:
         return payload if isinstance(payload, dict) else {}
     except Exception:
         return {}
+
+
+def _origin_url(request: web.Request) -> str:
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("Host", "")
+    return f"{scheme}://{host}" if host else ""

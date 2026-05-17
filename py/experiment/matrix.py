@@ -7,7 +7,7 @@ from typing import Any
 
 DEFAULT_GENERATION = {
     "seed": -1,
-    "steps": 28,
+    "steps": 22,
     "cfg": 6,
     "sampler": "euler_ancestral",
     "scheduler": "normal",
@@ -30,12 +30,13 @@ def build_experiment_cases(
     loras: list[dict[str, Any]] | None = None,
     use_source_loras: bool = False,
     generation_defaults: dict[str, Any] | None = None,
+    use_source_generation: bool = True,
 ) -> list[dict[str, Any]]:
     defaults = {**DEFAULT_GENERATION, **(generation_defaults or {})}
     cases: list[dict[str, Any]] = []
     for index, item in enumerate(items, start=1):
         compiled = _compile_prompt(item)
-        generation = _generation(item, defaults)
+        generation = _generation(item, defaults, use_source_generation=use_source_generation)
         case_id = _case_id(item, index)
         case_loras = _normalize_loras(loras or [])
         if use_source_loras and not case_loras:
@@ -94,20 +95,6 @@ def _compile_prompt(item: dict[str, Any]) -> dict[str, Any]:
             "prompt_compile": prompt_compile,
         }
 
-    if asset_type == "ai_generation_reference":
-        tags = [tag for tag in item.get("raw_tags", []) if _looks_prompt_safe(tag)]
-        positive = ", ".join(tags[:40])
-        if positive:
-            prompt_compile["strategy"] = "safe_tags_fallback"
-            warnings.append("No source prompt; used short ASCII-like tags as a fallback.")
-            return {
-                "status": "ready",
-                "positive": positive,
-                "negative": negative,
-                "warnings": warnings,
-                "prompt_compile": prompt_compile,
-            }
-
     prompt_compile.update(
         {
             "strategy": "visual_reference_requires_rewrite",
@@ -137,7 +124,10 @@ def _candidate_terms(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _generation(item: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+def _generation(item: dict[str, Any], defaults: dict[str, Any], *, use_source_generation: bool = True) -> dict[str, Any]:
+    if not use_source_generation:
+        return dict(defaults)
+
     seed = item.get("aigc_seed") if isinstance(item.get("aigc_seed"), dict) else {}
     generation = {
         **defaults,
@@ -228,6 +218,8 @@ def _looks_prompt_safe(value: Any) -> bool:
 
 def _sampler(value: Any) -> str:
     text = _string(value).strip().lower().replace(" ", "_")
+    if text in {"", "undefined", "none", "null"}:
+        return DEFAULT_GENERATION["sampler"]
     mapping = {
         "euler_a": "euler_ancestral",
         "euler_ancestral": "euler_ancestral",
@@ -240,6 +232,8 @@ def _sampler(value: Any) -> str:
 
 def _scheduler(value: Any) -> str:
     text = _string(value).strip().lower().replace(" ", "_")
+    if text in {"", "undefined", "none", "null"}:
+        return DEFAULT_GENERATION["scheduler"]
     mapping = {"karras": "karras", "normal": "normal", "simple": "simple"}
     return mapping.get(text, text or DEFAULT_GENERATION["scheduler"])
 

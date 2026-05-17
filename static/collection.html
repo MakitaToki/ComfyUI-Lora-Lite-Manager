@@ -7,13 +7,21 @@
     <link rel="stylesheet" href="/lora-lite-static/collection_styles.css">
 </head>
 <body>
-    <header class="topbar">
+    <header class="app-header">
         <div class="brand">
-            <h1>Collection Lite</h1>
-            <p id="summary">正在读取作品集...</p>
+            <div class="brand-mark">C</div>
+            <div>
+                <h1>Collection Lite</h1>
+                <p id="summary">正在读取作品集...</p>
+            </div>
         </div>
+        <nav class="main-tabs" aria-label="主菜单">
+            <a class="tab" href="/lora-lite">LoRA</a>
+            <a class="tab active" href="/collection-lite">作品集</a>
+            <a class="tab" href="/lora-lite-static/recipe.html">Recipe</a>
+            <a class="tab" href="/experiments-lite">Experiment</a>
+        </nav>
         <nav class="topbar-actions">
-            <a class="button secondary" href="/lora-lite">LoRA 管理</a>
             <button id="refreshBtn" class="button secondary" type="button">刷新</button>
             <button id="exportBtn" class="button primary" type="button">导出 Creative Seeds</button>
         </nav>
@@ -43,55 +51,55 @@
                 <details class="manual-panel">
                     <summary>添加 Pinterest / 小红书 / 本地图片参考</summary>
                     <form id="manualForm" class="manual-form">
-                    <label>
-                        <span>素材类型</span>
-                        <select id="manualAssetType">
-                            <option value="photo_reference">摄影参考</option>
-                            <option value="graphic_design_reference">平面设计参考</option>
-                            <option value="ai_generation_reference">AI / 插画生成参考</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>平台</span>
-                        <input id="manualPlatform" placeholder="pinterest / xiaohongshu / web / local">
-                    </label>
-                    <label>
-                        <span>来源页面，可留空</span>
-                        <input id="manualSourceUrl" placeholder="https://...">
-                    </label>
-                    <label>
-                        <span>图片 URL</span>
-                        <input id="manualImageUrl" placeholder="https://...jpg">
-                    </label>
-                    <label>
-                        <span>本地图片路径，可替代图片 URL</span>
-                        <input id="manualLocalPath" placeholder="填写完整路径，例如 C:\Users\Administrator\Pictures\ref.png">
-                    </label>
-                    <p class="field-hint full">本地图片路径需要填 Windows 完整绝对路径，不要只填插件目录片段；如果图片已经在缓存目录，也请从资源管理器地址栏复制完整路径。</p>
-                    <label>
-                        <span>主体 / 用途</span>
-                        <input id="manualSubject" placeholder="例如：护肤品海报、室内摄影、角色立绘">
-                    </label>
-                    <label>
-                        <span>构图 / 版式</span>
-                        <input id="manualComposition" placeholder="例如：主体居中、大留白、标题左上">
-                    </label>
-                    <label>
-                        <span>色彩 / 光影</span>
-                        <input id="manualColorLighting" placeholder="例如：米白黑红，柔光，高调">
-                    </label>
-                    <label>
-                        <span>设计语言 / 后期</span>
-                        <input id="manualDesignLanguage" placeholder="例如：无衬线大标题、胶片颗粒、细线框">
-                    </label>
-                    <label class="full">
-                        <span>关键词</span>
-                        <input id="manualTags" placeholder="中文或英文标签，用逗号分隔">
-                    </label>
-                    <label class="full">
-                        <span>备注</span>
-                        <textarea id="manualNotes" rows="3" placeholder="这张图值得参考的地方"></textarea>
-                    </label>
+                        <label>
+                            <span>素材类型</span>
+                            <select id="manualAssetType">
+                                <option value="photo_reference">摄影参考</option>
+                                <option value="graphic_design_reference">平面设计参考</option>
+                                <option value="ai_generation_reference">AI / 插画生成参考</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>平台</span>
+                            <input id="manualPlatform" placeholder="pinterest / xiaohongshu / web / local">
+                        </label>
+                        <label>
+                            <span>来源页面，可留空</span>
+                            <input id="manualSourceUrl" placeholder="https://...">
+                        </label>
+                        <label>
+                            <span>图片 URL</span>
+                            <input id="manualImageUrl" placeholder="https://...jpg">
+                        </label>
+                        <label>
+                            <span>本地图片路径，可替代图片 URL</span>
+                            <input id="manualLocalPath" placeholder="填写完整 Windows 路径，例如 C:\Users\Administrator\Pictures\ref.png">
+                        </label>
+                        <p class="field-hint full">本地图片路径需要填写完整绝对路径，不要只填插件目录片段；如果图片已经在缓存目录，也请从资源管理器地址栏复制完整路径。</p>
+                        <label>
+                            <span>主体 / 用途</span>
+                            <input id="manualSubject" placeholder="例如：护肤品海报、室内摄影、角色立绘">
+                        </label>
+                        <label>
+                            <span>构图 / 版式</span>
+                            <input id="manualComposition" placeholder="例如：主体居中、大留白、标题在左">
+                        </label>
+                        <label>
+                            <span>色彩 / 光影</span>
+                            <input id="manualColorLighting" placeholder="例如：米白黑红、柔光、高调">
+                        </label>
+                        <label>
+                            <span>设计语言 / 后期</span>
+                            <input id="manualDesignLanguage" placeholder="例如：无衬线大标题、胶片颗粒、细线框">
+                        </label>
+                        <label class="full">
+                            <span>关键词</span>
+                            <input id="manualTags" placeholder="中文或英文标签，用逗号分隔">
+                        </label>
+                        <label class="full">
+                            <span>备注</span>
+                            <textarea id="manualNotes" rows="3" placeholder="这张图值得参考的地方"></textarea>
+                        </label>
                         <button class="button primary" type="submit">保存参考</button>
                     </form>
                 </details>
@@ -116,7 +124,7 @@
             <div id="grid" class="masonry" aria-live="polite"></div>
             <div id="emptyState" class="empty" hidden>
                 <strong>还没有收藏素材</strong>
-                <span>先导入一条 Civitai 链接，或者添加一张外部视觉参考图。</span>
+                <span>先导入一条 Civitai 图片链接，或者添加一张外部视觉参考图。</span>
             </div>
         </section>
 

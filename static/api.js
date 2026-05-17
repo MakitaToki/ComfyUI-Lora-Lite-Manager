@@ -56,6 +56,14 @@ export async function saveMetadata(filePath, metadata) {
     }));
 }
 
+export async function deleteLora(filePath) {
+    return readJson(await fetch(`${BASE}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_path: filePath }),
+    }));
+}
+
 export async function downloadLora({ modelVersionId, saveRoot, relativeDir }) {
     return readJson(await fetch(`${BASE}/download`, {
         method: "POST",

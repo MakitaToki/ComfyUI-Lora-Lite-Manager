@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Recipe Lite</title>
+    <link rel="stylesheet" href="/lora-lite-static/collection_styles.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-mark">R</div>
+            <div>
+                <h1>Recipe Lite</h1>
+                <p id="summary">把作品素材整理成可重复测试的组合方案。</p>
+            </div>
+        </div>
+        <nav class="main-tabs" aria-label="主菜单">
+            <a class="tab" href="/lora-lite">LoRA</a>
+            <a class="tab" href="/collection-lite">作品集</a>
+            <a class="tab active" href="/lora-lite-static/recipe.html">Recipe</a>
+            <a class="tab" href="/experiments-lite">Experiment</a>
+        </nav>
+        <nav class="topbar-actions">
+            <a class="button secondary" href="/collection-lite">打开作品集</a>
+            <button id="exportRecipeBtn" class="button primary" type="button">预览组合 JSON</button>
+        </nav>
+    </header>
+
+    <main class="recipe-layout">
+        <aside class="recipe-sidebar">
+            <div class="sidebar-section">
+                <h2>Recipe</h2>
+                <button class="recipe-list-item active" type="button">
+                    <strong>LoRA 强度测试</strong>
+                    <span>主素材 + LoRA 强度 + 随机种子</span>
+                </button>
+                <button class="recipe-list-item" type="button" disabled>
+                    <strong>视觉参考转提示词</strong>
+                    <span>等提示词编译器接入</span>
+                </button>
+            </div>
+        </aside>
+
+        <section class="recipe-content">
+            <section class="recipe-hero">
+                <div>
+                    <p class="eyebrow">组合方案</p>
+                    <h2>先选一张“可直接生成”的主素材，再添加参考图和 LoRA 变量，最后展开成一组实验。</h2>
+                    <p class="hero-note">可直接生成 = 已经保存了正向提示词。纯视觉参考、手动备注和小红书/Pinterest 图片需要先整理成提示词。</p>
+                </div>
+                <div class="recipe-status">
+                    <span>预计生成</span>
+                    <strong id="caseCount">0 张</strong>
+                </div>
+            </section>
+
+            <section class="recipe-step">
+                <div class="step-head">
+                    <div>
+                        <span class="step-index">1</span>
+                        <h3>选择主素材</h3>
+                        <p>主素材必须已经有可用提示词。外部视觉参考不会在这里直接作为主素材。</p>
+                    </div>
+                    <button id="chooseMainBtn" class="button primary" type="button">从作品集中选择</button>
+                </div>
+                <div id="mainSeedSlot" class="selected-slot empty-slot">
+                    <strong>还没有选择主素材</strong>
+                    <span>请选择一张 Civitai / AI 生成作品作为提示词来源。</span>
+                </div>
+            </section>
+
+            <section class="recipe-step">
+                <div class="step-head">
+                    <div>
+                        <span class="step-index">2</span>
+                        <h3>添加参考素材</h3>
+                        <p>参考素材只作为备注和判断依据保存，暂时不会直接塞进 ComfyUI 的正向提示词。</p>
+                    </div>
+                    <button id="addRefBtn" class="button secondary" type="button">添加参考图</button>
+                </div>
+                <div id="referenceList" class="reference-list">
+                    <div class="selected-slot empty-slot">
+                        <strong>没有参考素材</strong>
+                        <span>可以稍后添加构图、色彩、氛围或设计语言参考。</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="recipe-step">
+                <div class="step-head">
+                    <div>
+                        <span class="step-index">3</span>
+                        <h3>设置实验变量</h3>
+                        <p>这里决定会展开多少张图。第一版重点测试 LoRA 强度和 seed。</p>
+                    </div>
+                </div>
+                <div class="recipe-grid compact-grid">
+                    <article class="recipe-card">
+                        <h3>LoRA 组合</h3>
+                        <p>优先从 LoRA 管理页选择。这里会显示你给 LoRA 写的风格备注，方便决定该拿它做什么实验。</p>
+                        <button id="chooseLoraBtn" class="button secondary" type="button">从 LoRA 管理选择</button>
+                        <div id="loraRows" class="lora-rows"></div>
+                        <form id="loraForm" class="inline-form">
+                            <input id="loraNameInput" placeholder="LoRA 文件名，例如 Pvnk_styl2.safetensors">
+                            <input id="loraStrengthInput" placeholder="强度，例如 0.4, 0.6, 0.8">
+                            <button class="button secondary" type="submit">添加</button>
+                        </form>
+                    </article>
+
+                    <article class="recipe-card">
+                        <h3>生成参数</h3>
+                        <div class="param-grid">
+                            <label><span>Checkpoint</span><input id="checkpointInput" value="fabricatedXL_v70.safetensors"></label>
+                            <label><span>Steps</span><input id="stepsInput" type="number" min="1" value="22"></label>
+                            <label><span>宽度</span><input id="widthInput" type="number" min="64" step="8" value="832"></label>
+                            <label><span>高度</span><input id="heightInput" type="number" min="64" step="8" value="1216"></label>
+                            <label class="full"><span>随机种子</span><input id="seedsInput" value="123456, 234567"></label>
+                            <label class="full"><span>Prompt mode</span><select id="promptModeInput"><option value="danbooru">Danbooru tags</option><option value="natural">Natural language</option></select></label>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="experiments" class="recipe-step">
+                <div class="step-head">
+                    <div>
+                        <span class="step-index">4</span>
+                        <h3>实验预览</h3>
+                        <p id="matrixSummary">选择主素材后，会在这里看到组合数量。</p>
+                    </div>
+                    <div class="topbar-actions">
+                        <button id="previewExperimentBtn" class="button secondary" type="button">Preview experiment</button>
+                        <button id="runExperimentBtn" class="button primary" type="button">Run experiment</button>
+                    </div>
+                </div>
+                <div id="experimentPreviewSummary" class="experiment-summary" hidden></div>
+                <pre id="recipePreview">{}</pre>
+            </section>
+        </section>
+    </main>
+
+    <section id="pickerDialog" class="dialog" hidden>
+        <div class="dialog-card picker-card">
+            <div class="panel-header">
+                <div>
+                    <h2 id="pickerTitle">选择素材</h2>
+                    <p id="pickerHint">从作品集中选择，不需要手填 ID。</p>
+                </div>
+                <button id="closePickerBtn" class="icon-button" type="button" aria-label="关闭">x</button>
+            </div>
+            <div class="picker-toolbar">
+                <input id="pickerSearch" type="search" placeholder="搜索 prompt、tags、备注">
+                <select id="pickerFilter">
+                    <option value="main">只看可直接生成</option>
+                    <option value="all">全部素材</option>
+                </select>
+            </div>
+            <div id="pickerGrid" class="picker-grid"></div>
+        </div>
+    </section>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/lora-lite-static/recipe_app.js"></script>
+</body>
+</html>

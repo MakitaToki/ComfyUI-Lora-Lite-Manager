@@ -1,5 +1,6 @@
 import {
     calculateHash,
+    deleteLora,
     downloadLora,
     fetchCivitaiByHash,
     fetchLoras,
@@ -134,6 +135,7 @@ function cardHtml(item) {
     const words = item.trigger_words || [];
     const civitai = item.civitai || {};
     const versionId = civitai.modelVersionId || civitai.version?.id || "";
+    const notes = String(item.metadata?.notes || item.notes || "").trim();
 
     return `
         <article class="card${selected}" data-path="${escapeAttr(item.file_path)}">
@@ -143,6 +145,7 @@ function cardHtml(item) {
             <div class="card-body">
                 <h3>${escapeHtml(item.name)}</h3>
                 <p>${escapeHtml(item.relative_path)}</p>
+                ${notes ? `<p class="note-preview">${escapeHtml(notes.slice(0, 110))}</p>` : ""}
                 <div class="meta-row">
                     ${item.base_model ? `<span>${escapeHtml(item.base_model)}</span>` : ""}
                     ${formatBytes(item.size) ? `<span>${formatBytes(item.size)}</span>` : ""}
@@ -175,6 +178,7 @@ function renderDetails() {
     const civitai = item.civitai || {};
     const versionId = civitai.modelVersionId || civitai.version?.id || "";
     const modelId = civitai.modelId || civitai.model?.id || "";
+    const links = civitaiLinks(item);
 
     els.detailsTitle.textContent = item.name;
     els.detailsPath.textContent = item.file_path;
@@ -189,6 +193,11 @@ function renderDetails() {
             <div><span>基础模型</span><strong>${escapeHtml(item.base_model || "-")}</strong></div>
             <div><span>SHA256</span><strong>${escapeHtml(item.sha256 || "未计算")}</strong></div>
             <div><span>Civitai</span><strong>${modelId || versionId ? `Model ${escapeHtml(modelId || "-")} / Version ${escapeHtml(versionId || "-")}` : "未关联"}</strong></div>
+        </div>
+        <div class="link-panel">
+            <strong>来源链接</strong>
+            ${links.modelPage ? `<a href="${escapeAttr(links.modelPage)}" target="_blank" rel="noreferrer">打开 Civitai 模型页</a>` : "<span>未记录模型页链接</span>"}
+            ${links.download ? `<a href="${escapeAttr(links.download)}" target="_blank" rel="noreferrer">打开下载链接</a>` : "<span>未记录下载链接</span>"}
         </div>
         <form id="metadataForm" class="form">
             <label>
@@ -207,6 +216,7 @@ function renderDetails() {
                 <button class="button primary" type="submit">保存备注/触发词</button>
                 <button id="hashBtn" class="button secondary" type="button">计算哈希</button>
                 <button id="civitaiBtn" class="button secondary" type="button">匹配 Civitai</button>
+                <button id="deleteLoraBtn" class="button danger" type="button">删除 LoRA</button>
             </div>
         </form>
     `;
@@ -214,6 +224,7 @@ function renderDetails() {
     document.getElementById("metadataForm").addEventListener("submit", saveSelectedMetadata);
     document.getElementById("hashBtn").addEventListener("click", hashSelected);
     document.getElementById("civitaiBtn").addEventListener("click", matchSelectedCivitai);
+    document.getElementById("deleteLoraBtn").addEventListener("click", deleteSelectedLora);
 }
 
 async function saveSelectedMetadata(event) {
@@ -271,11 +282,38 @@ async function matchSelectedCivitai() {
     }
 }
 
+async function deleteSelectedLora() {
+    if (!state.selected) {
+        return;
+    }
+
+    const item = state.selected;
+    const confirmed = window.confirm(`确定要删除 ${item.name}？\n\n将删除 LoRA 文件和同名元数据/预览图，操作不可恢复。`);
+    if (!confirmed) {
+        return;
+    }
+
+    setBusy(true, "正在删除 LoRA...");
+    try {
+        await deleteLora(item.file_path);
+        state.selected = null;
+        await loadLoras({ quiet: true });
+        renderDetails();
+        toast("LoRA 已删除", "success");
+    } catch (error) {
+        toast(error.message, "error");
+    } finally {
+        setBusy(false);
+    }
+}
+
 function metadataFromCivitai(item, version, sha256) {
     const model = version.model || {};
     const images = Array.isArray(version.images) ? version.images : [];
     const image = images.find((entry) => entry?.url) || {};
     const trainedWords = Array.isArray(version.trainedWords) ? version.trainedWords : [];
+    const modelPage = model.id && version.id ? `https://civitai.com/models/${model.id}?modelVersionId=${version.id}` : "";
+    const downloadUrl = version.id ? `https://civitai.com/api/download/models/${version.id}` : "";
 
     return {
         ...(item.metadata || {}),
@@ -287,13 +325,29 @@ function metadataFromCivitai(item, version, sha256) {
         trigger_words: trainedWords,
         trained_words: trainedWords,
         preview_url: image.url || item.metadata?.preview_url || "",
+        source_url: modelPage || item.metadata?.source_url || "",
+        download_url: downloadUrl || item.metadata?.download_url || "",
         civitai: {
             modelId: model.id || null,
             modelVersionId: version.id || null,
+            modelPageUrl: modelPage,
+            downloadUrl,
             model,
             version,
             images,
         },
+    };
+}
+
+function civitaiLinks(item) {
+    const metadata = item.metadata || {};
+    const civitai = item.civitai || metadata.civitai || {};
+    const modelId = civitai.modelId || civitai.model?.id || "";
+    const versionId = civitai.modelVersionId || civitai.version?.id || "";
+    const fileDownload = civitai.file?.downloadUrl || "";
+    return {
+        modelPage: metadata.source_url || civitai.modelPageUrl || (modelId && versionId ? `https://civitai.com/models/${modelId}?modelVersionId=${versionId}` : ""),
+        download: metadata.download_url || civitai.downloadUrl || fileDownload || (versionId ? `https://civitai.com/api/download/models/${versionId}` : ""),
     };
 }
 

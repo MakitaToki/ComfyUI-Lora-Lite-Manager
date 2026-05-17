@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Recipe Lite Experiments</title>
+    <link rel="stylesheet" href="/lora-lite-static/collection_styles.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-mark">E</div>
+            <div>
+                <h1>Experiments</h1>
+                <p id="summary">Compare prompt variants, LoRA combinations, strengths, and seeds.</p>
+            </div>
+        </div>
+        <nav class="main-tabs" aria-label="Main menu">
+            <a class="tab" href="/lora-lite">LoRA</a>
+            <a class="tab" href="/collection-lite">Collection</a>
+            <a class="tab" href="/recipe-lite">Recipe</a>
+            <a class="tab active" href="/experiments-lite">Experiment</a>
+        </nav>
+        <nav class="topbar-actions">
+            <a class="button secondary" href="/recipe-lite">New recipe</a>
+            <button id="refreshBtn" class="button primary" type="button">Refresh</button>
+        </nav>
+    </header>
+
+    <main class="experiment-layout">
+        <aside class="experiment-sidebar">
+            <div class="panel-header">
+                <div>
+                    <h2>Runs</h2>
+                    <p>Saved local experiment history.</p>
+                </div>
+            </div>
+            <div id="runList" class="run-list"></div>
+        </aside>
+
+        <section class="experiment-content">
+            <section id="emptyState" class="empty">
+                <strong>No experiment selected</strong>
+                <span>Create a run from Recipe Lite, or select a saved run.</span>
+            </section>
+
+            <section id="runDetails" hidden>
+                <div class="recipe-hero compact-hero">
+                    <div>
+                        <p class="eyebrow" id="runStatus">Run</p>
+                        <h2 id="runTitle">Experiment run</h2>
+                        <p class="hero-note" id="runMeta"></p>
+                    </div>
+                    <div class="recipe-status">
+                        <span>Completed</span>
+                        <strong id="runProgress">0 / 0</strong>
+                    </div>
+                </div>
+
+                <div id="runSummary" class="experiment-summary"></div>
+                <div id="resultGrid" class="result-grid"></div>
+            </section>
+        </section>
+    </main>
+
+    <section id="resultDialog" class="dialog" hidden>
+        <div class="dialog-card result-dialog-card">
+            <div class="panel-header">
+                <div>
+                    <h2 id="resultTitle">Result</h2>
+                    <p id="resultSubtitle"></p>
+                </div>
+                <button id="closeResultBtn" class="icon-button" type="button" aria-label="Close">x</button>
+            </div>
+            <div id="resultBody" class="result-body"></div>
+        </div>
+    </section>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/lora-lite-static/experiments_app.js"></script>
+</body>
+</html>
