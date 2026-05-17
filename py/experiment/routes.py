@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -79,7 +80,7 @@ async def create_experiment_run(request: web.Request) -> web.Response:
     comfyui_url = str(payload.get("comfyui_url") or _origin_url(request) or "http://127.0.0.1:8188")
     submit = bool(payload.get("submit", True))
     try:
-        run = create_run(recipe, comfyui_url=comfyui_url, submit=submit)
+        run = await asyncio.to_thread(create_run, recipe, comfyui_url=comfyui_url, submit=submit)
         return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
     except Exception as exc:
         return web.json_response({"success": False, "error": str(exc)}, status=502)
@@ -98,7 +99,7 @@ async def get_experiment_run(request: web.Request) -> web.Response:
 
 
 async def refresh_experiment_run(request: web.Request) -> web.Response:
-    run = refresh_run(request.match_info.get("run_id", ""))
+    run = await asyncio.to_thread(refresh_run, request.match_info.get("run_id", ""))
     if run is None:
         return web.json_response({"success": False, "error": "Experiment run not found"}, status=404)
     return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
@@ -108,7 +109,7 @@ async def submit_experiment_run_step(request: web.Request) -> web.Response:
     payload = await _read_json(request)
     batch_size = int(payload.get("batch_size", 1) or 1)
     try:
-        run = submit_run_step(request.match_info.get("run_id", ""), batch_size=batch_size)
+        run = await asyncio.to_thread(submit_run_step, request.match_info.get("run_id", ""), batch_size=batch_size)
     except Exception as exc:
         return web.json_response({"success": False, "error": str(exc)}, status=502)
     if run is None:
