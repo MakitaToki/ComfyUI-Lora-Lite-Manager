@@ -127,19 +127,7 @@ def create_run(recipe: dict[str, Any], *, comfyui_url: str = DEFAULT_COMFYUI_URL
     run_id = "run_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
     now = _now()
     status = "draft"
-    submissions: list[dict[str, Any]] = []
-
-    if submit and preview["cases"]:
-        workflow = read_json(DEFAULT_WORKFLOW)
-        status = "submitted"
-        for case in preview["cases"]:
-            try:
-                patched = patch_workflow(workflow, case)
-                prompt_id = submit_prompt(comfyui_url, patched)
-                submissions.append({"case_id": case["case_id"], "prompt_id": prompt_id, "status": "submitted", "outputs": []})
-            except Exception as exc:
-                submissions.append({"case_id": case["case_id"], "status": "error", "error": str(exc), "outputs": []})
-                status = "error"
+    submissions = _initial_submissions(preview)
 
     _insert_run(
         {
@@ -154,7 +142,42 @@ def create_run(recipe: dict[str, Any], *, comfyui_url: str = DEFAULT_COMFYUI_URL
             "workflow": str(DEFAULT_WORKFLOW),
         }
     )
+    if submit and preview["cases"]:
+        while True:
+            run = submit_run_step(run_id, batch_size=1)
+            if not run or run["status"] in {"queued", "completed", "error"}:
+                break
     return get_run(run_id) or {}
+
+
+def submit_run_step(run_id: str, *, batch_size: int = 1) -> dict[str, Any] | None:
+    run = get_run(run_id)
+    if run is None:
+        return None
+
+    submissions = _ensure_submission_plan(run)
+    pending = [item for item in submissions if item.get("status") == "pending"]
+    if not pending:
+        status = _run_status_from_submissions(submissions)
+        _update_run(run_id, status=status, submissions=submissions)
+        return get_run(run_id)
+
+    workflow = read_json(DEFAULT_WORKFLOW)
+    status = "submitting"
+    for submission in pending[: max(1, batch_size)]:
+        case = submission.get("case") or _case_by_id(run, submission.get("case_id"))
+        try:
+            patched = patch_workflow(workflow, case)
+            prompt_id = submit_prompt(run["comfyui_url"], patched)
+            submission.update({"prompt_id": prompt_id, "status": "queued", "outputs": []})
+            submission.pop("error", None)
+        except Exception as exc:
+            submission.update({"status": "error", "error": str(exc), "outputs": []})
+
+    if not any(item.get("status") == "pending" for item in submissions):
+        status = _run_status_from_submissions(submissions)
+    _update_run(run_id, status=status, submissions=_strip_cases(submissions))
+    return get_run(run_id)
 
 
 def list_runs(limit: int = 50) -> list[dict[str, Any]]:
@@ -191,7 +214,7 @@ def refresh_run(run_id: str) -> dict[str, Any] | None:
     any_error = False
     for submission in run["submissions"]:
         prompt_id = submission.get("prompt_id")
-        if not prompt_id or submission.get("status") == "completed":
+        if submission.get("status") in {"pending", "completed"} or not prompt_id:
             any_error = any_error or submission.get("status") == "error"
             all_done = all_done and submission.get("status") == "completed"
             continue
@@ -210,9 +233,11 @@ def refresh_run(run_id: str) -> dict[str, Any] | None:
             any_error = True
             changed = True
 
-    status = "completed" if all_done and not any_error else "error" if any_error else run["status"]
+    status = _run_status_from_submissions(run["submissions"]) if run["submissions"] else run["status"]
+    if status == "queued" and any(submission.get("status") == "completed" for submission in run["submissions"]):
+        status = "running"
     if changed or status != run["status"]:
-        _update_run(run_id, status=status, submissions=run["submissions"])
+        _update_run(run_id, status=status, submissions=_strip_cases(run["submissions"]))
     return get_run(run_id)
 
 
@@ -384,6 +409,50 @@ def _generation(raw: Any) -> dict[str, Any]:
         "clip_skip": _int(source.get("clip_skip"), 2),
         "batch_size": _int(source.get("batch_size"), 1),
     }
+
+
+def _initial_submissions(preview: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"case_id": case.get("case_id", ""), "status": "pending", "outputs": []}
+        for case in preview.get("cases", [])
+        if case.get("case_id")
+    ]
+
+
+def _ensure_submission_plan(run: dict[str, Any]) -> list[dict[str, Any]]:
+    submissions = run.get("submissions") if isinstance(run.get("submissions"), list) else []
+    if submissions:
+        return submissions
+    return _initial_submissions(run.get("preview") if isinstance(run.get("preview"), dict) else {})
+
+
+def _case_by_id(run: dict[str, Any], case_id: Any) -> dict[str, Any]:
+    for case in run.get("preview", {}).get("cases", []):
+        if case.get("case_id") == case_id:
+            return case
+    raise ValueError(f"Experiment case not found: {case_id}")
+
+
+def _strip_cases(submissions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{key: value for key, value in submission.items() if key != "case"} for submission in submissions]
+
+
+def _run_status_from_submissions(submissions: list[dict[str, Any]]) -> str:
+    if not submissions:
+        return "draft"
+    statuses = [
+        "queued" if str(item.get("status") or "pending") == "submitted" else str(item.get("status") or "pending")
+        for item in submissions
+    ]
+    if any(status == "pending" for status in statuses):
+        return "submitting" if any(status in {"queued", "completed", "error"} for status in statuses) else "draft"
+    if all(status == "completed" for status in statuses):
+        return "completed"
+    if any(status == "queued" for status in statuses):
+        return "queued"
+    if any(status == "completed" for status in statuses):
+        return "running"
+    return "error" if any(status == "error" for status in statuses) else "draft"
 
 
 def _fetch_history(comfyui_url: str, prompt_id: str) -> dict[str, Any] | None:

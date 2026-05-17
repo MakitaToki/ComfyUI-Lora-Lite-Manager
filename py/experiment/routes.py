@@ -7,7 +7,7 @@ from aiohttp import web
 
 from ..collection.storage import get_artwork, search_artworks
 from .matrix import build_experiment_cases
-from .service import build_experiment_preview, create_run, get_run, list_runs, refresh_run
+from .service import build_experiment_preview, create_run, get_run, list_runs, refresh_run, submit_run_step
 
 
 def register_experiment_routes(routes: Any, app: web.Application) -> None:
@@ -17,6 +17,7 @@ def register_experiment_routes(routes: Any, app: web.Application) -> None:
     routes.post("/api/lora-lite/experiments/runs")(create_experiment_run)
     routes.get("/api/lora-lite/experiments/runs")(list_experiment_runs)
     routes.get("/api/lora-lite/experiments/runs/{run_id}")(get_experiment_run)
+    routes.post("/api/lora-lite/experiments/runs/{run_id}/submit-step")(submit_experiment_run_step)
     routes.post("/api/lora-lite/experiments/runs/{run_id}/refresh")(refresh_experiment_run)
 
 
@@ -49,6 +50,19 @@ async def export_experiment_cases(request: web.Request) -> web.Response:
         use_source_loras=bool(payload.get("use_source_loras", False)),
         generation_defaults=payload.get("generation_defaults") if isinstance(payload.get("generation_defaults"), dict) else None,
         use_source_generation=bool(payload.get("use_source_generation", True)),
+    )
+    return web.json_response(
+        {
+            "success": True,
+            "format": "lora_lite_experiment_cases.v1",
+            "cases": cases,
+            "summary": {
+                "total": len(cases),
+                "ready": sum(1 for case in cases if case.get("compile_status") == "ready"),
+                "draft": sum(1 for case in cases if case.get("compile_status") != "ready"),
+            },
+        },
+        dumps=lambda value: json.dumps(value, ensure_ascii=False),
     )
 
 
@@ -88,19 +102,18 @@ async def refresh_experiment_run(request: web.Request) -> web.Response:
     if run is None:
         return web.json_response({"success": False, "error": "Experiment run not found"}, status=404)
     return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
-    return web.json_response(
-        {
-            "success": True,
-            "format": "lora_lite_experiment_cases.v1",
-            "cases": cases,
-            "summary": {
-                "total": len(cases),
-                "ready": sum(1 for case in cases if case.get("compile_status") == "ready"),
-                "draft": sum(1 for case in cases if case.get("compile_status") != "ready"),
-            },
-        },
-        dumps=lambda value: json.dumps(value, ensure_ascii=False),
-    )
+
+
+async def submit_experiment_run_step(request: web.Request) -> web.Response:
+    payload = await _read_json(request)
+    batch_size = int(payload.get("batch_size", 1) or 1)
+    try:
+        run = submit_run_step(request.match_info.get("run_id", ""), batch_size=batch_size)
+    except Exception as exc:
+        return web.json_response({"success": False, "error": str(exc)}, status=502)
+    if run is None:
+        return web.json_response({"success": False, "error": "Experiment run not found"}, status=404)
+    return web.json_response({"success": True, "run": run}, dumps=lambda value: json.dumps(value, ensure_ascii=False))
 
 
 async def _read_json(request: web.Request) -> dict[str, Any]:

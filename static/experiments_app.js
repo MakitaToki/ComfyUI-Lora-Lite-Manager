@@ -107,6 +107,7 @@ function renderRunList() {
         return;
     }
     for (const run of state.runs) {
+        const stats = runListStats(run);
         const button = document.createElement("button");
         button.className = "run-list-item";
         button.classList.toggle("active", state.selectedRun?.run_id === run.run_id);
@@ -114,7 +115,7 @@ function renderRunList() {
         button.addEventListener("click", () => selectRun(run.run_id));
         button.innerHTML = `
             <strong>${escapeHtml(run.run_id)}</strong>
-            <span>${escapeHtml(run.status)} · ${run.completed || 0}/${run.total || 0} completed</span>
+            <span>${escapeHtml(run.status)} · submitted ${stats.submitted}/${stats.total} · done ${stats.completed} · failed ${stats.error}</span>
             <span>${escapeHtml(run.created_at || "")}</span>
         `;
         els.runList.append(button);
@@ -131,11 +132,11 @@ function renderRun() {
 
     const preview = run.preview || {};
     const summary = preview.summary || {};
-    const completed = (run.submissions || []).filter((item) => item.status === "completed").length;
+    const stats = runListStats(run);
     els.runStatus.textContent = run.status;
     els.runTitle.textContent = run.run_id;
     els.runMeta.textContent = `${run.created_at} · ${summary.total || 0} cases · ${run.workflow || ""}`;
-    els.runProgress.textContent = `${completed} / ${summary.total || 0}`;
+    els.runProgress.textContent = `${stats.submitted} / ${stats.total}`;
     els.runSummary.innerHTML = `
         <div><strong>${summary.total || 0}</strong><span>cases</span></div>
         <div><strong>${preview.prompt_variants?.length || 0}</strong><span>prompt variants</span></div>
@@ -143,6 +144,20 @@ function renderRun() {
         <div><strong>${preview.strengths?.join(", ") || "-"}</strong><span>strengths</span></div>
     `;
     renderResultGrid(run);
+}
+
+function runListStats(run) {
+    const submissions = run.submissions || [];
+    const total = run.total || run.preview?.summary?.total || submissions.length || 0;
+    const queued = submissions.filter((item) => ["queued", "submitted"].includes(item.status)).length;
+    const completed = run.completed ?? submissions.filter((item) => item.status === "completed").length;
+    const error = submissions.filter((item) => item.status === "error").length;
+    return {
+        total,
+        submitted: queued + completed + error,
+        completed,
+        error,
+    };
 }
 
 function renderResultGrid(run) {

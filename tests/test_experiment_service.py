@@ -85,7 +85,67 @@ def test_run_storage_roundtrip(tmp_path: Path, monkeypatch):
     assert loaded is not None
     assert loaded["run_id"] == run["run_id"]
     assert loaded["preview"]["summary"]["total"] == 2
+    assert [item["status"] for item in loaded["submissions"]] == ["pending", "pending"]
     assert service.list_runs()[0]["run_id"] == run["run_id"]
+
+
+def test_submit_run_step_persists_incremental_queue_progress(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "experiments.sqlite3")
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+    monkeypatch.setattr(service, "read_json", lambda _path: {"workflow": True})
+    monkeypatch.setattr(service, "patch_workflow", lambda workflow, case: {**workflow, "case": case["case_id"]})
+    submitted = []
+
+    def fake_submit_prompt(_url, workflow):
+        submitted.append(workflow["case"])
+        return f"prompt-{len(submitted)}"
+
+    monkeypatch.setattr(service, "submit_prompt", fake_submit_prompt)
+
+    run = service.create_run(
+        {
+            "main_artwork": {"id": "main"},
+            "lora_matrix": [{"name": "a.safetensors", "strengths": [0.4]}],
+            "seeds": [123],
+            "generation": {"checkpoint": "model.safetensors"},
+        },
+        submit=False,
+    )
+
+    first = service.submit_run_step(run["run_id"], batch_size=1)
+    assert first is not None
+    assert [item["status"] for item in first["submissions"]] == ["queued", "pending"]
+    assert first["status"] == "submitting"
+
+    second = service.submit_run_step(run["run_id"], batch_size=1)
+    assert second is not None
+    assert [item["status"] for item in second["submissions"]] == ["queued", "queued"]
+    assert second["status"] == "queued"
+    assert [item["prompt_id"] for item in second["submissions"]] == ["prompt-1", "prompt-2"]
+
+
+def test_submit_run_step_records_case_errors(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "experiments.sqlite3")
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+    monkeypatch.setattr(service, "read_json", lambda _path: {"workflow": True})
+    monkeypatch.setattr(service, "patch_workflow", lambda workflow, case: workflow)
+    monkeypatch.setattr(service, "submit_prompt", lambda _url, _workflow: (_ for _ in ()).throw(RuntimeError("queue down")))
+
+    run = service.create_run(
+        {
+            "main_artwork": {"id": "main"},
+            "lora_matrix": [{"name": "a.safetensors", "strengths": [0.4]}],
+            "seeds": [123],
+            "generation": {"checkpoint": "model.safetensors"},
+        },
+        submit=False,
+    )
+
+    result = service.submit_run_step(run["run_id"], batch_size=2)
+    assert result is not None
+    assert result["status"] == "error"
+    assert [item["status"] for item in result["submissions"]] == ["error", "error"]
+    assert all("queue down" in item["error"] for item in result["submissions"])
 
 
 def test_workflow_patch_receives_multiple_loras(monkeypatch):

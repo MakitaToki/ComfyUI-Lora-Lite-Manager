@@ -1,6 +1,6 @@
 import { collectionImageUrl, fetchArtworks } from "./collection_api.js";
 import { fetchLoras, previewUrl } from "./api.js";
-import { createExperimentRun, previewExperiment } from "./experiment_api.js";
+import { createExperimentRun, refreshExperimentRun, submitExperimentRunStep, previewExperiment } from "./experiment_api.js";
 
 const state = {
     artworks: [],
@@ -9,6 +9,9 @@ const state = {
     pickerQuery: "",
     main: null,
     refs: [],
+    jsonExpanded: false,
+    latestPreview: null,
+    activeRunId: "",
     loras: [
         { name: "Pvnk_styl2.safetensors", strengths: [0.4, 0.6, 0.8] },
     ],
@@ -34,6 +37,13 @@ const els = {
     promptModeInput: document.querySelector("#promptModeInput"),
     matrixSummary: document.querySelector("#matrixSummary"),
     experimentPreviewSummary: document.querySelector("#experimentPreviewSummary"),
+    runProgressPanel: document.querySelector("#runProgressPanel"),
+    runProgressTitle: document.querySelector("#runProgressTitle"),
+    runProgressMessage: document.querySelector("#runProgressMessage"),
+    runProgressBar: document.querySelector("#runProgressBar"),
+    runProgressStats: document.querySelector("#runProgressStats"),
+    openRunBtn: document.querySelector("#openRunBtn"),
+    toggleJsonBtn: document.querySelector("#toggleJsonBtn"),
     recipePreview: document.querySelector("#recipePreview"),
     previewExperimentBtn: document.querySelector("#previewExperimentBtn"),
     runExperimentBtn: document.querySelector("#runExperimentBtn"),
@@ -81,9 +91,12 @@ function bindEvents() {
     els.promptModeInput.addEventListener("change", renderPreview);
     els.previewExperimentBtn.addEventListener("click", handlePreviewExperiment);
     els.runExperimentBtn.addEventListener("click", handleRunExperiment);
+    els.toggleJsonBtn.addEventListener("click", toggleJsonPreview);
     els.exportRecipeBtn.addEventListener("click", () => {
-        navigator.clipboard?.writeText(JSON.stringify(buildRecipe(), null, 2));
-        showToast("Recipe JSON 已复制到剪贴板");
+        setJsonExpanded(true);
+        renderJsonPreview(state.latestPreview || buildRecipe());
+        document.getElementById("experiments")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        showToast("完整 JSON 已展开");
     });
 }
 
@@ -366,6 +379,7 @@ function addLora(event) {
 }
 
 function renderPreview() {
+    state.latestPreview = null;
     const recipe = buildRecipe();
     const comboCount = 1 + state.loras.length + (state.loras.length * (state.loras.length - 1)) / 2;
     const strengthCount = Math.max(1, uniqueStrengths().length);
@@ -376,13 +390,28 @@ function renderPreview() {
     els.matrixSummary.textContent = state.main
         ? `${variantCount} prompt variants × ${comboCount} LoRA combos × ${strengthCount} strengths × ${seedCount} seeds = ${caseCount} images`
         : "先选择主素材，再展开实验数量。";
-    els.recipePreview.textContent = JSON.stringify(recipe, null, 2);
+    renderSummaryCards({
+        total: caseCount,
+        promptVariants: variantCount,
+        loraCombos: comboCount,
+        strengths: strengthCount,
+        seeds: seedCount,
+        checkpoint: recipe.generation.checkpoint || "-",
+        size: `${recipe.generation.width} × ${recipe.generation.height}`,
+    });
+    if (state.jsonExpanded) {
+        renderJsonPreview(recipe);
+    }
 }
 
 async function handlePreviewExperiment() {
     try {
         const result = await previewExperiment(buildRecipe());
+        state.latestPreview = result.preview;
         renderExperimentPreview(result.preview);
+        if (state.jsonExpanded) {
+            renderJsonPreview(result.preview);
+        }
         showToast("Experiment preview updated");
     } catch (error) {
         showToast(error.message, true);
@@ -395,30 +424,133 @@ async function handleRunExperiment() {
         return;
     }
     els.runExperimentBtn.disabled = true;
+    els.previewExperimentBtn.disabled = true;
     els.runExperimentBtn.textContent = "Submitting...";
+    setRunProgress(null, "prepare", "准备实验任务", "正在创建 run，随后会逐个提交到 ComfyUI 队列。");
     try {
-        const result = await createExperimentRun(buildRecipe(), { submit: true });
-        showToast(`Experiment run created: ${result.run.run_id}`);
-        window.location.href = `/experiments-lite?run_id=${encodeURIComponent(result.run.run_id)}`;
+        const result = await createExperimentRun(buildRecipe(), { submit: false });
+        let run = result.run;
+        state.activeRunId = run.run_id;
+        setRunProgress(run, "submit", "正在提交队列", "已创建 run，正在逐个提交 case。");
+
+        while (hasPendingSubmissions(run)) {
+            const step = await submitExperimentRunStep(run.run_id, { batchSize: 1 });
+            run = step.run;
+            const pending = hasPendingSubmissions(run);
+            setRunProgress(run, pending ? "submit" : "queue", pending ? "正在提交队列" : "等待 / 执行中", latestRunMessage(run));
+        }
+
+        const refreshed = await refreshExperimentRun(run.run_id).catch(() => ({ run }));
+        run = refreshed.run || run;
+        setRunProgress(run, run.status === "completed" ? "done" : "queue", run.status === "completed" ? "已完成" : "已提交到 ComfyUI", latestRunMessage(run));
+        showToast(`Experiment run created: ${run.run_id}`);
+        window.setTimeout(() => {
+            window.location.href = `/experiments-lite?run_id=${encodeURIComponent(run.run_id)}`;
+        }, 1200);
     } catch (error) {
+        setRunProgress(null, "error", "提交失败", error.message);
         showToast(error.message, true);
     } finally {
         els.runExperimentBtn.disabled = false;
+        els.previewExperimentBtn.disabled = false;
         els.runExperimentBtn.textContent = "Run experiment";
     }
 }
 
 function renderExperimentPreview(preview) {
     const summary = preview.summary || {};
+    renderSummaryCards({
+        total: summary.total || 0,
+        promptVariants: preview.prompt_variants?.length || 0,
+        loraCombos: preview.lora_combos?.length || 0,
+        strengths: preview.strengths?.length || 0,
+        seeds: preview.seeds?.length || 0,
+        checkpoint: preview.cases?.[0]?.models?.checkpoint || els.checkpointInput.value.trim() || "-",
+        size: preview.cases?.[0]?.generation ? `${preview.cases[0].generation.width} × ${preview.cases[0].generation.height}` : `${els.widthInput.value} × ${els.heightInput.value}`,
+        warning: summary.warning,
+    });
+}
+
+function renderSummaryCards(summary) {
     els.experimentPreviewSummary.hidden = false;
     els.experimentPreviewSummary.innerHTML = `
-        <div><strong>${summary.total || 0}</strong><span>cases</span></div>
-        <div><strong>${preview.prompt_variants?.length || 0}</strong><span>prompt variants</span></div>
-        <div><strong>${preview.lora_combos?.length || 0}</strong><span>LoRA combos</span></div>
-        <div><strong>${preview.strengths?.length || 0}</strong><span>strengths</span></div>
+        <div><strong>${summary.total || 0}</strong><span>images</span></div>
+        <div><strong>${summary.promptVariants || 0}</strong><span>prompt variants</span></div>
+        <div><strong>${summary.loraCombos || 0}</strong><span>LoRA combos</span></div>
+        <div><strong>${summary.strengths || 0}</strong><span>strengths</span></div>
+        <div><strong>${summary.seeds || 0}</strong><span>seeds</span></div>
+        <div><strong>${escapeHtml(summary.checkpoint || "-")}</strong><span>checkpoint</span></div>
+        <div><strong>${escapeHtml(summary.size || "-")}</strong><span>size</span></div>
         ${summary.warning ? `<p>${escapeHtml(summary.warning)}</p>` : ""}
     `;
-    els.recipePreview.textContent = JSON.stringify(preview, null, 2);
+}
+
+function toggleJsonPreview() {
+    setJsonExpanded(!state.jsonExpanded);
+    if (state.jsonExpanded) {
+        renderJsonPreview(state.latestPreview || buildRecipe());
+    }
+}
+
+function setJsonExpanded(expanded) {
+    state.jsonExpanded = expanded;
+    els.recipePreview.hidden = !expanded;
+    els.toggleJsonBtn.textContent = expanded ? "收起完整 JSON" : "查看完整 JSON";
+}
+
+function renderJsonPreview(value) {
+    els.recipePreview.textContent = JSON.stringify(value, null, 2);
+}
+
+function hasPendingSubmissions(run) {
+    return (run?.submissions || []).some((item) => item.status === "pending");
+}
+
+function setRunProgress(run, stage, title, message) {
+    els.runProgressPanel.hidden = false;
+    els.runProgressTitle.textContent = title;
+    els.runProgressMessage.textContent = message || "";
+    els.runProgressPanel.dataset.stage = stage;
+    const stats = runStats(run);
+    const percent = stats.total ? Math.round(((stats.queued + stats.completed + stats.error) / stats.total) * 100) : 0;
+    els.runProgressBar.style.width = `${percent}%`;
+    els.runProgressStats.innerHTML = `
+        <span>总数 ${stats.total}</span>
+        <span>已提交 ${stats.queued + stats.completed}</span>
+        <span>完成 ${stats.completed}</span>
+        <span>失败 ${stats.error}</span>
+    `;
+    els.openRunBtn.hidden = !run?.run_id;
+    if (run?.run_id) {
+        els.openRunBtn.href = `/experiments-lite?run_id=${encodeURIComponent(run.run_id)}`;
+    }
+}
+
+function runStats(run) {
+    const submissions = run?.submissions || [];
+    const total = run?.preview?.summary?.total || submissions.length || 0;
+    return {
+        total,
+        pending: submissions.filter((item) => item.status === "pending").length,
+        queued: submissions.filter((item) => ["queued", "submitted"].includes(item.status)).length,
+        completed: submissions.filter((item) => item.status === "completed").length,
+        error: submissions.filter((item) => item.status === "error").length,
+    };
+}
+
+function latestRunMessage(run) {
+    const stats = runStats(run);
+    if (stats.error) {
+        const failed = (run.submissions || []).find((item) => item.status === "error");
+        return `有 ${stats.error} 个 case 提交失败。${failed?.error || ""}`;
+    }
+    if (stats.pending) {
+        return `还剩 ${stats.pending} 个 case 等待提交。`;
+    }
+    if (run?.status === "completed") {
+        return "ComfyUI 已生成完成。";
+    }
+    return "所有 case 已提交到 ComfyUI，正在等待或执行。";
 }
 
 function buildRecipe() {

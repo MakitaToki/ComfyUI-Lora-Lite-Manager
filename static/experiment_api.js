@@ -24,6 +24,14 @@ export async function createExperimentRun(recipe, { submit = true } = {}) {
     }));
 }
 
+export async function submitExperimentRunStep(runId, { batchSize = 1 } = {}) {
+    return readJson(await fetch(`${BASE}/runs/${encodeURIComponent(runId)}/submit-step`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_size: batchSize }),
+    }));
+}
+
 export async function fetchExperimentRuns({ limit = 50 } = {}) {
     const params = new URLSearchParams({ limit });
     return readJson(await fetch(`${BASE}/runs?${params}`));

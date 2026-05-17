@@ -134,8 +134,30 @@
                         <button id="runExperimentBtn" class="button primary" type="button">Run experiment</button>
                     </div>
                 </div>
-                <div id="experimentPreviewSummary" class="experiment-summary" hidden></div>
-                <pre id="recipePreview">{}</pre>
+                <div id="experimentPreviewSummary" class="experiment-summary"></div>
+                <div id="runProgressPanel" class="run-progress-panel" hidden>
+                    <div class="run-progress-head">
+                        <div>
+                            <h3 id="runProgressTitle">准备提交</h3>
+                            <p id="runProgressMessage">实验任务还没有开始。</p>
+                        </div>
+                        <a id="openRunBtn" class="button secondary" href="/experiments-lite" hidden>打开实验结果页</a>
+                    </div>
+                    <div class="progress-steps" aria-label="实验任务进度">
+                        <span data-stage="prepare">准备中</span>
+                        <span data-stage="submit">提交队列</span>
+                        <span data-stage="queue">等待/执行</span>
+                        <span data-stage="done">已完成</span>
+                    </div>
+                    <div class="progress-meter">
+                        <div id="runProgressBar"></div>
+                    </div>
+                    <div id="runProgressStats" class="progress-stats"></div>
+                </div>
+                <div class="json-preview-actions">
+                    <button id="toggleJsonBtn" class="button secondary" type="button">查看完整 JSON</button>
+                </div>
+                <pre id="recipePreview" hidden>{}</pre>
             </section>
         </section>
     </main>
