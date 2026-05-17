@@ -171,7 +171,10 @@ label span,
     position: sticky;
     top: 76px;
     align-self: start;
+    height: calc(100vh - 76px);
     min-height: calc(100vh - 76px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 18px;
     border-left: 1px solid var(--soft-line);
     background: #0d1117;
@@ -1181,7 +1184,10 @@ pre {
 
     .panel {
         position: static;
+        height: auto;
         min-height: 0;
+        overflow: visible;
+        overscroll-behavior: auto;
         border-top: 1px solid var(--soft-line);
         border-left: 0;
     }

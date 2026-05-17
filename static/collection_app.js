@@ -206,6 +206,7 @@ function renderGrid() {
 
 async function selectItem(id) {
     state.selectedId = id;
+    resetDetailsScroll();
     const local = state.items.find((item) => item.id === id);
     renderDetails(local, true);
     try {
@@ -213,6 +214,13 @@ async function selectItem(id) {
         renderDetails(result.item, false);
     } catch (error) {
         showToast(error.message, true);
+    }
+}
+
+function resetDetailsScroll() {
+    const panel = els.detailsBody?.closest(".panel");
+    if (panel) {
+        panel.scrollTop = 0;
     }
 }
 
