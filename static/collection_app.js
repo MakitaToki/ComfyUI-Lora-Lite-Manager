@@ -21,7 +21,8 @@ const els = {
     manualComposition: document.querySelector("#manualComposition"),
     manualColorLighting: document.querySelector("#manualColorLighting"),
     manualDesignLanguage: document.querySelector("#manualDesignLanguage"),
-    manualTags: document.querySelector("#manualTags"),
+    manualReusablePrompt: document.querySelector("#manualReusablePrompt"),
+    manualStyleBooster: document.querySelector("#manualStyleBooster"),
     manualNotes: document.querySelector("#manualNotes"),
     searchInput: document.querySelector("#searchInput"),
     sortSelect: document.querySelector("#sortSelect"),
@@ -101,7 +102,9 @@ async function handleManualAdd(event) {
     const composition = els.manualComposition.value.trim();
     const colorLighting = els.manualColorLighting.value.trim();
     const designLanguage = els.manualDesignLanguage.value.trim();
-    const tags = splitTags(els.manualTags.value);
+    const reusablePrompt = els.manualReusablePrompt.value.trim();
+    const styleBooster = els.manualStyleBooster.value.trim();
+    const tags = splitTags([subject, composition, colorLighting, designLanguage, reusablePrompt, styleBooster].join(","));
 
     setBusy(true, "正在保存视觉参考...");
     try {
@@ -120,6 +123,7 @@ async function handleManualAdd(event) {
                 lighting: colorLighting,
                 color_palette: splitTags(colorLighting),
                 mood: "",
+                style_booster: styleBooster,
             },
             design_language: {
                 color: colorLighting,
@@ -131,9 +135,9 @@ async function handleManualAdd(event) {
             retrieval: {
                 keywords_zh: tags,
                 keywords_en: [],
-                embedding_text: [subject, composition, colorLighting, designLanguage, els.manualNotes.value.trim()].filter(Boolean).join("，"),
+                embedding_text: [subject, composition, colorLighting, designLanguage, reusablePrompt, styleBooster, els.manualNotes.value.trim()].filter(Boolean).join("，"),
             },
-            positive_prompt: "",
+            positive_prompt: reusablePrompt,
             negative_prompt: assetType === "graphic_design_reference" ? "text, logo, watermark, distorted typography" : "",
             user_notes: els.manualNotes.value.trim(),
         });
