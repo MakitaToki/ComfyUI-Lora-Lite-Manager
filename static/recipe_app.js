@@ -42,6 +42,7 @@ const els = {
     runProgressMessage: document.querySelector("#runProgressMessage"),
     runProgressBar: document.querySelector("#runProgressBar"),
     runProgressStats: document.querySelector("#runProgressStats"),
+    runDiagnostics: document.querySelector("#runDiagnostics"),
     openRunBtn: document.querySelector("#openRunBtn"),
     toggleJsonBtn: document.querySelector("#toggleJsonBtn"),
     recipePreview: document.querySelector("#recipePreview"),
@@ -426,29 +427,31 @@ async function handleRunExperiment() {
     els.runExperimentBtn.disabled = true;
     els.previewExperimentBtn.disabled = true;
     els.runExperimentBtn.textContent = "Submitting...";
-    setRunProgress(null, "prepare", "准备实验任务", "正在创建 run，随后会逐个提交到 ComfyUI 队列。");
+    setRunProgress(null, "prepare", "创建 run", "正在创建实验记录，随后会生成 workflow 并提交到 ComfyUI /prompt。");
     try {
         const result = await createExperimentRun(buildRecipe(), { submit: false });
         let run = result.run;
         state.activeRunId = run.run_id;
-        setRunProgress(run, "submit", "正在提交队列", "已创建 run，正在逐个提交 case。");
+        setRunProgress(run, "submit", "提交 ComfyUI /prompt", "已创建 run，正在为每个 case 生成 workflow 并提交。");
 
         while (hasPendingSubmissions(run)) {
             const step = await submitExperimentRunStep(run.run_id, { batchSize: 1 });
             run = step.run;
             const pending = hasPendingSubmissions(run);
-            setRunProgress(run, pending ? "submit" : "queue", pending ? "正在提交队列" : "等待 / 执行中", latestRunMessage(run));
+            const stats = runStats(run);
+            const nextStage = stats.error ? "error" : pending ? "submit" : "queue";
+            setRunProgress(run, nextStage, pending ? "提交 ComfyUI /prompt" : "等待 ComfyUI 队列 / 执行", latestRunMessage(run));
         }
 
         const refreshed = await refreshExperimentRun(run.run_id).catch(() => ({ run }));
         run = refreshed.run || run;
-        setRunProgress(run, run.status === "completed" ? "done" : "queue", run.status === "completed" ? "已完成" : "已提交到 ComfyUI", latestRunMessage(run));
+        const stats = runStats(run);
+        const finalStage = stats.error ? "error" : run.status === "completed" ? "done" : "queue";
+        const finalTitle = stats.error ? "部分 case 失败" : run.status === "completed" ? "已完成" : "等待 ComfyUI 队列 / 执行";
+        setRunProgress(run, finalStage, finalTitle, latestRunMessage(run));
         showToast(`Experiment run created: ${run.run_id}`);
-        window.setTimeout(() => {
-            window.location.href = `/experiments-lite?run_id=${encodeURIComponent(run.run_id)}`;
-        }, 1200);
     } catch (error) {
-        setRunProgress(null, "error", "提交失败", error.message);
+        setRunProgress(null, "error", "创建 run 失败", error.message, { error });
         showToast(error.message, true);
     } finally {
         els.runExperimentBtn.disabled = false;
@@ -473,14 +476,16 @@ function renderExperimentPreview(preview) {
 
 function renderSummaryCards(summary) {
     els.experimentPreviewSummary.hidden = false;
+    const checkpoint = summary.checkpoint || "-";
+    const size = summary.size || "-";
     els.experimentPreviewSummary.innerHTML = `
-        <div><strong>${summary.total || 0}</strong><span>images</span></div>
-        <div><strong>${summary.promptVariants || 0}</strong><span>prompt variants</span></div>
-        <div><strong>${summary.loraCombos || 0}</strong><span>LoRA combos</span></div>
-        <div><strong>${summary.strengths || 0}</strong><span>strengths</span></div>
-        <div><strong>${summary.seeds || 0}</strong><span>seeds</span></div>
-        <div><strong>${escapeHtml(summary.checkpoint || "-")}</strong><span>checkpoint</span></div>
-        <div><strong>${escapeHtml(summary.size || "-")}</strong><span>size</span></div>
+        <div class="summary-card"><strong>${summary.total || 0}</strong><span>images</span></div>
+        <div class="summary-card"><strong>${summary.promptVariants || 0}</strong><span>prompt variants</span></div>
+        <div class="summary-card"><strong>${summary.loraCombos || 0}</strong><span>LoRA combos</span></div>
+        <div class="summary-card"><strong>${summary.strengths || 0}</strong><span>strengths</span></div>
+        <div class="summary-card"><strong>${summary.seeds || 0}</strong><span>seeds</span></div>
+        <div class="summary-card summary-card-wide" title="${escapeAttr(checkpoint)}"><strong>${escapeHtml(checkpoint)}</strong><span>checkpoint</span></div>
+        <div class="summary-card summary-card-size"><strong>${escapeHtml(size)}</strong><span>size</span></div>
         ${summary.warning ? `<p>${escapeHtml(summary.warning)}</p>` : ""}
     `;
 }
@@ -506,7 +511,7 @@ function hasPendingSubmissions(run) {
     return (run?.submissions || []).some((item) => item.status === "pending");
 }
 
-function setRunProgress(run, stage, title, message) {
+function setRunProgress(run, stage, title, message, options = {}) {
     els.runProgressPanel.hidden = false;
     els.runProgressTitle.textContent = title;
     els.runProgressMessage.textContent = message || "";
@@ -516,7 +521,8 @@ function setRunProgress(run, stage, title, message) {
     els.runProgressBar.style.width = `${percent}%`;
     els.runProgressStats.innerHTML = `
         <span>总数 ${stats.total}</span>
-        <span>已提交 ${stats.queued + stats.completed}</span>
+        <span>待提交 ${stats.pending}</span>
+        <span>已进队列 ${stats.queued}</span>
         <span>完成 ${stats.completed}</span>
         <span>失败 ${stats.error}</span>
     `;
@@ -524,6 +530,7 @@ function setRunProgress(run, stage, title, message) {
     if (run?.run_id) {
         els.openRunBtn.href = `/experiments-lite?run_id=${encodeURIComponent(run.run_id)}`;
     }
+    renderRunDiagnostics(run, options.error);
 }
 
 function runStats(run) {
@@ -542,7 +549,7 @@ function latestRunMessage(run) {
     const stats = runStats(run);
     if (stats.error) {
         const failed = (run.submissions || []).find((item) => item.status === "error");
-        return `有 ${stats.error} 个 case 提交失败。${failed?.error || ""}`;
+        return `有 ${stats.error} 个 case 失败，先看下面的问题详情。${failed?.error_message || failed?.error || ""}`;
     }
     if (stats.pending) {
         return `还剩 ${stats.pending} 个 case 等待提交。`;
@@ -550,7 +557,140 @@ function latestRunMessage(run) {
     if (run?.status === "completed") {
         return "ComfyUI 已生成完成。";
     }
-    return "所有 case 已提交到 ComfyUI，正在等待或执行。";
+    return "所有 case 已提交到 ComfyUI，正在等待队列或执行。";
+}
+
+function renderRunDiagnostics(run, generalError) {
+    const failures = failedSubmissions(run);
+    if (!failures.length && !generalError) {
+        els.runDiagnostics.hidden = true;
+        els.runDiagnostics.replaceChildren();
+        return;
+    }
+
+    els.runDiagnostics.hidden = false;
+    const failureItems = failures.slice(0, 5).map((submission) => {
+        const caseData = caseForSubmission(run, submission);
+        return `
+            <details class="diagnostic-item">
+                <summary>
+                    <strong>${escapeHtml(submission.case_id || caseData.case_id || "case")}</strong>
+                    <span>${escapeHtml(stageLabel(submission.stage))} · ${escapeHtml(errorTypeHint(submission))}</span>
+                </summary>
+                <dl>
+                    <div><dt>Prompt</dt><dd>${escapeHtml(caseData.prompt_variant_label || caseData.prompt_variant_id || "-")}</dd></div>
+                    <div><dt>LoRA</dt><dd>${escapeHtml(caseData.lora_combo_label || caseData.lora_combo_id || "-")}</dd></div>
+                    <div><dt>Strength</dt><dd>${escapeHtml(String(caseData.strength ?? "-"))}</dd></div>
+                    <div><dt>Seed</dt><dd>${escapeHtml(String(caseData.seed ?? "-"))}</dd></div>
+                    <div><dt>原因</dt><dd>${escapeHtml(submission.error_message || submission.error || "-")}</dd></div>
+                </dl>
+                <pre>${escapeHtml(submission.error_detail || submission.error || "")}</pre>
+            </details>
+        `;
+    }).join("");
+
+    const general = generalError ? `
+        <details class="diagnostic-item" open>
+            <summary><strong>创建 run 失败</strong><span>${escapeHtml(errorTypeHint({ error_detail: generalError.message, error: generalError.message }))}</span></summary>
+            <pre>${escapeHtml(generalError.message || String(generalError))}</pre>
+        </details>
+    ` : "";
+    const more = failures.length > 5 ? `<p class="diagnostic-more">还有 ${failures.length - 5} 个失败 case，可打开实验结果页查看。</p>` : "";
+    els.runDiagnostics.innerHTML = `
+        <div class="diagnostic-head">
+            <div>
+                <h4>问题详情</h4>
+                <p>${escapeHtml(diagnosticSummary(run, generalError))}</p>
+            </div>
+        </div>
+        ${general}
+        ${failureItems}
+        ${more}
+        <div class="diagnostic-actions">
+            ${run?.run_id ? `<a class="button secondary" href="/experiments-lite?run_id=${encodeURIComponent(run.run_id)}">打开实验结果页</a>` : ""}
+            <button id="copyDiagnosticsBtn" class="button secondary" type="button">复制诊断信息</button>
+        </div>
+    `;
+    document.querySelector("#copyDiagnosticsBtn")?.addEventListener("click", () => copyDiagnostics(run, generalError));
+}
+
+function failedSubmissions(run) {
+    return (run?.submissions || []).filter((item) => item.status === "error");
+}
+
+function caseForSubmission(run, submission) {
+    return (run?.preview?.cases || []).find((item) => item.case_id === submission.case_id) || {};
+}
+
+function stageLabel(stage) {
+    return {
+        pending: "待提交",
+        workflow: "生成 workflow",
+        prompt: "提交 /prompt",
+        queue: "ComfyUI 队列",
+        history: "查询 history",
+        completed: "已完成",
+    }[stage] || "未知阶段";
+}
+
+function errorTypeHint(submission) {
+    const type = submission.error_type || classifyErrorText(submission.error_detail || submission.error || "");
+    return {
+        connection: "检查 ComfyUI 是否运行、端口是否正确",
+        comfyui_http: "ComfyUI 拒绝请求，检查 workflow、模型文件或节点输入",
+        missing_prompt_id: "ComfyUI 响应异常，没有返回 prompt_id",
+        workflow: "生成 workflow 失败，检查 case 参数和节点模板",
+        history: "任务可能已提交，但结果查询失败",
+        unknown: "未归类错误，查看原始错误",
+    }[type] || "未归类错误，查看原始错误";
+}
+
+function classifyErrorText(value) {
+    const text = String(value || "").toLowerCase();
+    if (text.includes("prompt_id")) return "missing_prompt_id";
+    if (text.includes("timed out") || text.includes("timeout") || text.includes("connection") || text.includes("refused") || text.includes("urlopen")) return "connection";
+    if (text.includes("http") || text.includes("/prompt")) return "comfyui_http";
+    return "unknown";
+}
+
+function diagnosticSummary(run, generalError) {
+    if (generalError) {
+        return "创建 run 或调用接口时失败，下面保留了原始错误。";
+    }
+    const stats = runStats(run);
+    return `${stats.error} 个 case 失败。展开条目可以查看 case 参数和原始错误。`;
+}
+
+function copyDiagnostics(run, generalError) {
+    const text = diagnosticText(run, generalError);
+    navigator.clipboard?.writeText(text)
+        .then(() => showToast("诊断信息已复制"))
+        .catch(() => showToast("无法复制诊断信息", true));
+}
+
+function diagnosticText(run, generalError) {
+    const stats = runStats(run);
+    const lines = [
+        `run_id: ${run?.run_id || "-"}`,
+        `status: ${run?.status || "-"}`,
+        `total: ${stats.total}, pending: ${stats.pending}, queued: ${stats.queued}, completed: ${stats.completed}, error: ${stats.error}`,
+    ];
+    if (generalError) {
+        lines.push(`general_error: ${generalError.message || String(generalError)}`);
+    }
+    for (const submission of failedSubmissions(run)) {
+        const caseData = caseForSubmission(run, submission);
+        lines.push("");
+        lines.push(`case: ${submission.case_id || caseData.case_id || "-"}`);
+        lines.push(`stage: ${submission.stage || "-"}`);
+        lines.push(`prompt: ${caseData.prompt_variant_label || caseData.prompt_variant_id || "-"}`);
+        lines.push(`lora: ${caseData.lora_combo_label || caseData.lora_combo_id || "-"}`);
+        lines.push(`strength: ${caseData.strength ?? "-"}`);
+        lines.push(`seed: ${caseData.seed ?? "-"}`);
+        lines.push(`message: ${submission.error_message || submission.error || "-"}`);
+        lines.push(`detail: ${submission.error_detail || submission.error || "-"}`);
+    }
+    return lines.join("\n");
 }
 
 function buildRecipe() {

@@ -642,11 +642,12 @@ textarea:focus {
 
 .experiment-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
     gap: 10px;
 }
 
 .experiment-summary div {
+    min-width: 0;
     display: grid;
     gap: 4px;
     min-height: 68px;
@@ -657,9 +658,21 @@ textarea:focus {
 }
 
 .experiment-summary strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text);
     font-size: 18px;
     line-height: 1.2;
+}
+
+.experiment-summary .summary-card-wide {
+    grid-column: span 2;
+}
+
+.experiment-summary .summary-card-size {
+    min-width: 130px;
 }
 
 .experiment-summary span,
@@ -775,6 +788,99 @@ textarea:focus {
     border: 1px solid var(--soft-line);
     border-radius: 999px;
     background: rgba(8, 12, 18, 0.55);
+}
+
+.run-diagnostics {
+    display: grid;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.diagnostic-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.diagnostic-head h4 {
+    margin: 0;
+    color: var(--text);
+    font-size: 14px;
+}
+
+.diagnostic-head p,
+.diagnostic-more {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.diagnostic-item {
+    padding: 10px;
+    border: 1px solid rgba(255, 123, 123, 0.28);
+    border-radius: 8px;
+    background: rgba(143, 42, 42, 0.14);
+}
+
+.diagnostic-item summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.diagnostic-item summary strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.diagnostic-item summary span {
+    color: #ffd6d6;
+    font-size: 12px;
+    text-align: right;
+}
+
+.diagnostic-item dl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.diagnostic-item dl div {
+    min-width: 0;
+}
+
+.diagnostic-item dt {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.diagnostic-item dd {
+    min-width: 0;
+    overflow: hidden;
+    margin: 2px 0 0;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.diagnostic-item pre {
+    max-height: 180px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.diagnostic-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
 }
 
 .experiment-layout {
@@ -1341,6 +1447,41 @@ pre {
         flex-direction: column;
     }
 
+    .step-head .topbar-actions,
+    .json-preview-actions,
+    .diagnostic-actions {
+        justify-content: stretch;
+    }
+
+    .step-head .topbar-actions .button,
+    .json-preview-actions .button,
+    .diagnostic-actions .button {
+        width: 100%;
+    }
+
+    .experiment-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .experiment-summary .summary-card-wide,
+    .experiment-summary .summary-card-size {
+        grid-column: span 1;
+    }
+
+    .run-progress-head,
+    .diagnostic-item summary {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .diagnostic-item summary span {
+        text-align: left;
+    }
+
+    .diagnostic-item dl {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .artwork-slot {
         grid-template-columns: 76px minmax(0, 1fr);
     }
@@ -1361,5 +1502,13 @@ pre {
 
     .dialog {
         padding: 12px;
+    }
+}
+
+@media (max-width: 520px) {
+    .experiment-summary,
+    .progress-steps,
+    .diagnostic-item dl {
+        grid-template-columns: 1fr;
     }
 }

@@ -145,7 +145,73 @@ def test_submit_run_step_records_case_errors(tmp_path: Path, monkeypatch):
     assert result is not None
     assert result["status"] == "error"
     assert [item["status"] for item in result["submissions"]] == ["error", "error"]
-    assert all("queue down" in item["error"] for item in result["submissions"])
+    assert [item["stage"] for item in result["submissions"]] == ["prompt", "prompt"]
+    assert all(item["error_type"] == "unknown" for item in result["submissions"])
+    assert all("queue down" in item["error_detail"] for item in result["submissions"])
+
+
+def test_submit_run_step_records_partial_failure_diagnostics(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "experiments.sqlite3")
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+    monkeypatch.setattr(service, "read_json", lambda _path: {"workflow": True})
+    monkeypatch.setattr(service, "patch_workflow", lambda workflow, case: {**workflow, "case": case["case_id"]})
+    submitted = []
+
+    def fake_submit_prompt(_url, workflow):
+        submitted.append(workflow["case"])
+        if len(submitted) == 2:
+            raise RuntimeError("ComfyUI /prompt failed with HTTP 400: missing checkpoint")
+        return f"prompt-{len(submitted)}"
+
+    monkeypatch.setattr(service, "submit_prompt", fake_submit_prompt)
+
+    run = service.create_run(
+        {
+            "main_artwork": {"id": "main"},
+            "lora_matrix": [{"name": "a.safetensors", "strengths": [0.4]}],
+            "seeds": [123],
+            "generation": {"checkpoint": "model.safetensors"},
+        },
+        submit=False,
+    )
+
+    result = service.submit_run_step(run["run_id"], batch_size=2)
+    assert result is not None
+    assert result["status"] == "queued"
+    assert [item["status"] for item in result["submissions"]] == ["queued", "error"]
+    failed = result["submissions"][1]
+    assert failed["stage"] == "prompt"
+    assert failed["error_type"] == "comfyui_http"
+    assert "missing checkpoint" in failed["error_detail"]
+
+
+def test_refresh_run_records_history_diagnostics(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "experiments.sqlite3")
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+    monkeypatch.setattr(service, "read_json", lambda _path: {"workflow": True})
+    monkeypatch.setattr(service, "patch_workflow", lambda workflow, case: workflow)
+    monkeypatch.setattr(service, "submit_prompt", lambda _url, _workflow: "prompt-1")
+    monkeypatch.setattr(service, "_fetch_history", lambda _url, _prompt_id: (_ for _ in ()).throw(TimeoutError("history timed out")))
+
+    run = service.create_run(
+        {
+            "main_artwork": {"id": "main"},
+            "lora_matrix": [],
+            "seeds": [123],
+            "generation": {"checkpoint": "model.safetensors"},
+        },
+        submit=False,
+    )
+    queued = service.submit_run_step(run["run_id"], batch_size=1)
+    assert queued is not None
+
+    refreshed = service.refresh_run(run["run_id"])
+    assert refreshed is not None
+    failed = refreshed["submissions"][0]
+    assert failed["status"] == "error"
+    assert failed["stage"] == "history"
+    assert failed["error_type"] == "connection"
+    assert "history timed out" in failed["error_detail"]
 
 
 def test_workflow_patch_receives_multiple_loras(monkeypatch):

@@ -162,17 +162,29 @@ def submit_run_step(run_id: str, *, batch_size: int = 1) -> dict[str, Any] | Non
         _update_run(run_id, status=status, submissions=submissions)
         return get_run(run_id)
 
-    workflow = read_json(DEFAULT_WORKFLOW)
+    try:
+        workflow = read_json(DEFAULT_WORKFLOW)
+    except Exception as exc:
+        for submission in pending:
+            _mark_submission_error(submission, exc, stage="workflow")
+        _update_run(run_id, status="error", submissions=_strip_cases(submissions))
+        return get_run(run_id)
+
     status = "submitting"
     for submission in pending[: max(1, batch_size)]:
-        case = submission.get("case") or _case_by_id(run, submission.get("case_id"))
         try:
+            case = submission.get("case") or _case_by_id(run, submission.get("case_id"))
             patched = patch_workflow(workflow, case)
-            prompt_id = submit_prompt(run["comfyui_url"], patched)
-            submission.update({"prompt_id": prompt_id, "status": "queued", "outputs": []})
-            submission.pop("error", None)
         except Exception as exc:
-            submission.update({"status": "error", "error": str(exc), "outputs": []})
+            _mark_submission_error(submission, exc, stage="workflow")
+            continue
+        try:
+            prompt_id = submit_prompt(run["comfyui_url"], patched)
+            submission.update({"prompt_id": prompt_id, "status": "queued", "stage": "queue", "outputs": []})
+            for key in ("error", "error_type", "error_message", "error_detail"):
+                submission.pop(key, None)
+        except Exception as exc:
+            _mark_submission_error(submission, exc, stage="prompt")
 
     if not any(item.get("status") == "pending" for item in submissions):
         status = _run_status_from_submissions(submissions)
@@ -224,12 +236,14 @@ def refresh_run(run_id: str) -> dict[str, Any] | None:
                 submission["history"] = history
                 submission["outputs"] = outputs_from_history(history)
                 submission["status"] = "completed"
+                submission["stage"] = "completed"
+                for key in ("error", "error_type", "error_message", "error_detail"):
+                    submission.pop(key, None)
                 changed = True
             else:
                 all_done = False
         except Exception as exc:
-            submission["status"] = "error"
-            submission["error"] = str(exc)
+            _mark_submission_error(submission, exc, stage="history")
             any_error = True
             changed = True
 
@@ -413,7 +427,7 @@ def _generation(raw: Any) -> dict[str, Any]:
 
 def _initial_submissions(preview: dict[str, Any]) -> list[dict[str, Any]]:
     return [
-        {"case_id": case.get("case_id", ""), "status": "pending", "outputs": []}
+        {"case_id": case.get("case_id", ""), "status": "pending", "stage": "pending", "outputs": []}
         for case in preview.get("cases", [])
         if case.get("case_id")
     ]
@@ -435,6 +449,37 @@ def _case_by_id(run: dict[str, Any], case_id: Any) -> dict[str, Any]:
 
 def _strip_cases(submissions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{key: value for key, value in submission.items() if key != "case"} for submission in submissions]
+
+
+def _mark_submission_error(submission: dict[str, Any], exc: Exception, *, stage: str) -> None:
+    detail = str(exc)
+    error_type, message = _classify_submission_error(detail, stage=stage)
+    submission.update(
+        {
+            "status": "error",
+            "stage": stage,
+            "error": message,
+            "error_type": error_type,
+            "error_message": message,
+            "error_detail": detail,
+            "outputs": [],
+        }
+    )
+
+
+def _classify_submission_error(detail: str, *, stage: str) -> tuple[str, str]:
+    text = detail.lower()
+    if "did not return prompt_id" in text:
+        return "missing_prompt_id", "ComfyUI did not return a prompt_id."
+    if "timed out" in text or "timeout" in text or "connection" in text or "refused" in text or "urlopen" in text:
+        return "connection", "Could not reach ComfyUI or the request timed out."
+    if "http" in text or "/prompt failed" in text:
+        return "comfyui_http", "ComfyUI rejected the prompt request."
+    if stage == "workflow":
+        return "workflow", "Failed to build the ComfyUI workflow for this case."
+    if stage == "history":
+        return "history", "The prompt was submitted, but result history could not be queried."
+    return "unknown", "Experiment case failed."
 
 
 def _run_status_from_submissions(submissions: list[dict[str, Any]]) -> str:
