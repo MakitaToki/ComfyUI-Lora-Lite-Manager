@@ -237,7 +237,6 @@ function renderDetails(item, loading) {
 
     els.detailsBody.append(assetTypeEditor(item));
     els.detailsBody.append(referenceInfoEditor(item));
-    els.detailsBody.append(section("备注", item.user_notes || "无"));
     els.detailsBody.append(generationSection(item));
     els.detailsBody.append(modelSection(item.model_refs || []));
     els.detailsBody.append(section("正向提示词", item.positive_prompt || "无"));
@@ -333,6 +332,17 @@ function referenceInfoEditor(item) {
 
     const form = document.createElement("form");
     form.className = "reference-info-form";
+    for (const field of promptFields()) {
+        const label = document.createElement("label");
+        label.append(textEl("span", field.label));
+        const input = document.createElement("textarea");
+        input.name = field.key;
+        input.rows = field.rows || 2;
+        input.value = promptValue(item, field.key);
+        input.placeholder = field.placeholder;
+        label.append(input);
+        form.append(label);
+    }
     for (const field of referenceFields()) {
         const label = document.createElement("label");
         label.append(textEl("span", field.label));
@@ -364,6 +374,9 @@ async function handleReferenceInfoSave(event, item) {
 
     const form = event.currentTarget;
     const visualStructure = { ...(item.visual_structure || {}) };
+    const userNotes = String(form.elements.name?.value || "").trim();
+    const positivePrompt = String(form.elements.reusable_prompt?.value || "").trim();
+    visualStructure.style_booster = String(form.elements.style_booster?.value || "").trim();
     for (const field of referenceFields()) {
         const value = form.elements[field.key]?.value || "";
         visualStructure[field.key] = field.key === "color_palette"
@@ -373,7 +386,11 @@ async function handleReferenceInfoSave(event, item) {
 
     setBusy(true, "正在保存参考信息...");
     try {
-        const result = await updateArtwork(item.id, { visual_structure: visualStructure });
+        const result = await updateArtwork(item.id, {
+            user_notes: userNotes,
+            positive_prompt: positivePrompt,
+            visual_structure: visualStructure,
+        });
         showToast("参考信息已保存");
         await loadItems();
         renderDetails(result.item, false);
@@ -402,6 +419,14 @@ async function handleAssetTypeChange(item, assetType) {
     }
 }
 
+function promptFields() {
+    return [
+        { key: "name", label: "名称", placeholder: "给这张作品起一个方便识别的名字", rows: 1 },
+        { key: "reusable_prompt", label: "可复用提示词", placeholder: "可以直接复用到提示词里的主体、画面或风格描述" },
+        { key: "style_booster", label: "风格强化词", placeholder: "强化风格、材质、光影、质感的关键词或短句" },
+    ];
+}
+
 function referenceFields() {
     return [
         { key: "subject", label: "主体/角色", placeholder: "例如：半身少女、产品主体、室内空间" },
@@ -409,6 +434,19 @@ function referenceFields() {
         { key: "color_palette", label: "色彩", placeholder: "例如：荧光黄、亮蓝、玫红、黑灰" },
         { key: "mood", label: "氛围", placeholder: "例如：街头、甜酷、涂鸦、霓虹" },
     ];
+}
+
+function promptValue(item, key) {
+    if (key === "name") {
+        return String(item.user_notes || "");
+    }
+    if (key === "reusable_prompt") {
+        return String(item.positive_prompt || "");
+    }
+    if (key === "style_booster") {
+        return referenceValue(item, "style_booster");
+    }
+    return "";
 }
 
 function referenceValue(item, key) {

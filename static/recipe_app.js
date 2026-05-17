@@ -183,6 +183,7 @@ function renderPicker() {
         body.append(textEl("strong", titleOf(item)));
         body.append(textEl("span", isDirectlyGeneratable(item) ? "可直接生成" : "需要整理提示词"));
         body.append(textEl("p", descriptionOf(item)));
+        body.append(promptSummaryEl(item));
         body.append(referenceSummaryEl(item));
         card.append(body);
         els.pickerGrid.append(card);
@@ -514,6 +515,7 @@ function artworkSlotHtml(item, badge, removable) {
             <span>${escapeHtml(badge)} · ${isDirectlyGeneratable(item) ? "可直接生成" : "需要整理"}</span>
             <strong>${escapeHtml(titleOf(item))}</strong>
             <p>${escapeHtml(descriptionOf(item))}</p>
+            ${promptSummaryHtml(item)}
             ${referenceSummaryHtml(item)}
         </div>
         ${removable ? '<button class="icon-button" type="button" aria-label="移除">x</button>' : ""}
@@ -540,11 +542,49 @@ function searchText(item) {
     return [
         titleOf(item),
         descriptionOf(item),
+        reusablePrompt(item),
+        styleBooster(item),
         ...referenceFields().map((field) => referenceValue(item, field.key)),
         item.creator,
         item.source,
         ...(item.raw_tags || []),
     ].join(" ").toLowerCase();
+}
+
+function promptSummaryEl(item) {
+    const wrap = document.createElement("div");
+    wrap.className = "prompt-summary";
+    for (const field of promptFields()) {
+        const row = document.createElement("span");
+        row.innerHTML = `<b>${escapeHtml(field.label)}</b>${escapeHtml(field.value(item) || "未整理")}`;
+        wrap.append(row);
+    }
+    return wrap;
+}
+
+function promptSummaryHtml(item) {
+    return `
+        <div class="prompt-summary">
+            ${promptFields().map((field) => `
+                <span><b>${escapeHtml(field.label)}</b>${escapeHtml(field.value(item) || "未整理")}</span>
+            `).join("")}
+        </div>
+    `;
+}
+
+function promptFields() {
+    return [
+        { label: "可复用提示词", value: reusablePrompt },
+        { label: "风格强化词", value: styleBooster },
+    ];
+}
+
+function reusablePrompt(item) {
+    return String(item.positive_prompt || "").trim();
+}
+
+function styleBooster(item) {
+    return referenceValue(item, "style_booster");
 }
 
 function referenceFields() {

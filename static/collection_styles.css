@@ -1087,12 +1087,21 @@ pre {
     padding: 0;
 }
 
-.picker-item .reference-summary,
-.slot-text .reference-summary {
+.prompt-summary {
+    display: grid;
+    gap: 6px;
     padding: 0;
 }
 
-.reference-summary span {
+.picker-item .reference-summary,
+.slot-text .reference-summary,
+.picker-item .prompt-summary,
+.slot-text .prompt-summary {
+    padding: 0;
+}
+
+.reference-summary span,
+.prompt-summary span {
     display: grid;
     gap: 2px;
     min-width: 0;
@@ -1107,10 +1116,20 @@ pre {
     overflow-wrap: anywhere;
 }
 
-.reference-summary b {
+.prompt-summary span {
+    border-color: rgba(240, 179, 106, 0.22);
+    background: rgba(240, 179, 106, 0.06);
+}
+
+.reference-summary b,
+.prompt-summary b {
     color: var(--accent);
     font-size: 11px;
     font-weight: 800;
+}
+
+.prompt-summary b {
+    color: var(--accent-2);
 }
 
 .picker-item strong,
@@ -1130,7 +1149,9 @@ pre {
 }
 
 .picker-item .reference-summary span,
-.slot-text .reference-summary span {
+.slot-text .reference-summary span,
+.picker-item .prompt-summary span,
+.slot-text .prompt-summary span {
     color: #dce4ee;
     font-weight: 500;
 }
