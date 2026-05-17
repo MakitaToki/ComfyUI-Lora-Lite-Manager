@@ -183,6 +183,7 @@ function renderPicker() {
         body.append(textEl("strong", titleOf(item)));
         body.append(textEl("span", isDirectlyGeneratable(item) ? "可直接生成" : "需要整理提示词"));
         body.append(textEl("p", descriptionOf(item)));
+        body.append(referenceSummaryEl(item));
         card.append(body);
         els.pickerGrid.append(card);
     }
@@ -513,6 +514,7 @@ function artworkSlotHtml(item, badge, removable) {
             <span>${escapeHtml(badge)} · ${isDirectlyGeneratable(item) ? "可直接生成" : "需要整理"}</span>
             <strong>${escapeHtml(titleOf(item))}</strong>
             <p>${escapeHtml(descriptionOf(item))}</p>
+            ${referenceSummaryHtml(item)}
         </div>
         ${removable ? '<button class="icon-button" type="button" aria-label="移除">x</button>' : ""}
     `;
@@ -527,7 +529,7 @@ function titleOf(item) {
 }
 
 function descriptionOf(item) {
-    return compact(item.positive_prompt || item.user_notes || item.visual_structure?.composition || item.design_language?.layout || firstTag(item) || "没有描述");
+    return compact(item.positive_prompt || item.user_notes || referenceValue(item, "composition") || item.design_language?.layout || firstTag(item) || "没有描述");
 }
 
 function firstTag(item) {
@@ -538,10 +540,50 @@ function searchText(item) {
     return [
         titleOf(item),
         descriptionOf(item),
+        ...referenceFields().map((field) => referenceValue(item, field.key)),
         item.creator,
         item.source,
         ...(item.raw_tags || []),
     ].join(" ").toLowerCase();
+}
+
+function referenceFields() {
+    return [
+        { key: "subject", label: "主体/角色" },
+        { key: "composition", label: "构图" },
+        { key: "color_palette", label: "色彩" },
+        { key: "mood", label: "氛围" },
+    ];
+}
+
+function referenceValue(item, key) {
+    const visual = item.visual_structure || {};
+    const value = visual[key];
+    if (Array.isArray(value)) {
+        return value.join("，");
+    }
+    return String(value || "").trim();
+}
+
+function referenceSummaryEl(item) {
+    const wrap = document.createElement("div");
+    wrap.className = "reference-summary";
+    for (const field of referenceFields()) {
+        const row = document.createElement("span");
+        row.innerHTML = `<b>${escapeHtml(field.label)}</b>${escapeHtml(referenceValue(item, field.key) || "未整理")}`;
+        wrap.append(row);
+    }
+    return wrap;
+}
+
+function referenceSummaryHtml(item) {
+    return `
+        <div class="reference-summary">
+            ${referenceFields().map((field) => `
+                <span><b>${escapeHtml(field.label)}</b>${escapeHtml(referenceValue(item, field.key) || "未整理")}</span>
+            `).join("")}
+        </div>
+    `;
 }
 
 function parseNumberList(value) {

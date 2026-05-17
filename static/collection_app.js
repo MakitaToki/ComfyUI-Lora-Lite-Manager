@@ -236,14 +236,14 @@ function renderDetails(item, loading) {
     els.detailsBody.append(actions);
 
     els.detailsBody.append(assetTypeEditor(item));
+    els.detailsBody.append(referenceInfoEditor(item));
+    els.detailsBody.append(section("备注", item.user_notes || "无"));
     els.detailsBody.append(generationSection(item));
     els.detailsBody.append(modelSection(item.model_refs || []));
     els.detailsBody.append(section("正向提示词", item.positive_prompt || "无"));
     els.detailsBody.append(section("负向提示词", item.negative_prompt || "无"));
-    els.detailsBody.append(jsonSection("视觉结构", item.visual_structure || {}));
     els.detailsBody.append(jsonSection("设计语言", item.design_language || {}));
     els.detailsBody.append(jsonSection("迁移规则", item.transfer || {}));
-    els.detailsBody.append(section("备注", item.user_notes || "无"));
     els.detailsBody.append(tagSection(item.raw_tags || []));
     els.detailsBody.append(metaDebugSection(item));
 
@@ -326,6 +326,64 @@ function assetTypeEditor(item) {
     return block;
 }
 
+function referenceInfoEditor(item) {
+    const block = document.createElement("section");
+    block.className = "detail-section reference-info-section";
+    block.append(textEl("h3", "参考信息"));
+
+    const form = document.createElement("form");
+    form.className = "reference-info-form";
+    for (const field of referenceFields()) {
+        const label = document.createElement("label");
+        label.append(textEl("span", field.label));
+        const input = document.createElement("textarea");
+        input.name = field.key;
+        input.rows = 2;
+        input.value = referenceValue(item, field.key);
+        input.placeholder = field.placeholder;
+        label.append(input);
+        form.append(label);
+    }
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "button primary wide";
+    saveBtn.type = "submit";
+    saveBtn.textContent = "保存参考信息";
+    form.append(saveBtn);
+    form.addEventListener("submit", (event) => handleReferenceInfoSave(event, item));
+
+    block.append(form);
+    return block;
+}
+
+async function handleReferenceInfoSave(event, item) {
+    event.preventDefault();
+    if (!item?.id) {
+        return;
+    }
+
+    const form = event.currentTarget;
+    const visualStructure = { ...(item.visual_structure || {}) };
+    for (const field of referenceFields()) {
+        const value = form.elements[field.key]?.value || "";
+        visualStructure[field.key] = field.key === "color_palette"
+            ? splitTags(value)
+            : value.trim();
+    }
+
+    setBusy(true, "正在保存参考信息...");
+    try {
+        const result = await updateArtwork(item.id, { visual_structure: visualStructure });
+        showToast("参考信息已保存");
+        await loadItems();
+        renderDetails(result.item, false);
+    } catch (error) {
+        showToast(error.message, true);
+    } finally {
+        setBusy(false);
+    }
+}
+
 async function handleAssetTypeChange(item, assetType) {
     if (!item?.id || assetType === item.asset_type) {
         return;
@@ -342,6 +400,24 @@ async function handleAssetTypeChange(item, assetType) {
     } finally {
         setBusy(false);
     }
+}
+
+function referenceFields() {
+    return [
+        { key: "subject", label: "主体/角色", placeholder: "例如：半身少女、产品主体、室内空间" },
+        { key: "composition", label: "构图", placeholder: "例如：中心聚焦、半身像占中下区域、背景横向平衡" },
+        { key: "color_palette", label: "色彩", placeholder: "例如：荧光黄、亮蓝、玫红、黑灰" },
+        { key: "mood", label: "氛围", placeholder: "例如：街头、甜酷、涂鸦、霓虹" },
+    ];
+}
+
+function referenceValue(item, key) {
+    const visual = item.visual_structure || {};
+    const value = visual[key];
+    if (Array.isArray(value)) {
+        return value.join("，");
+    }
+    return String(value || "");
 }
 
 function jsonSection(title, value) {

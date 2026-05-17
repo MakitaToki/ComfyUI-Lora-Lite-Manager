@@ -409,6 +409,19 @@ textarea:focus {
     gap: 7px;
 }
 
+.reference-info-form {
+    display: grid;
+    gap: 10px;
+}
+
+.reference-info-form label {
+    gap: 5px;
+}
+
+.reference-info-form textarea {
+    min-height: 58px;
+}
+
 .detail-section p,
 .model-list {
     color: #dce4ee;
@@ -1067,6 +1080,39 @@ pre {
     padding: 10px;
 }
 
+.reference-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0;
+}
+
+.picker-item .reference-summary,
+.slot-text .reference-summary {
+    padding: 0;
+}
+
+.reference-summary span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: 6px 7px;
+    border: 1px solid rgba(98, 199, 212, 0.2);
+    border-radius: 6px;
+    color: #dce4ee;
+    background: rgba(98, 199, 212, 0.06);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.reference-summary b {
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 800;
+}
+
 .picker-item strong,
 .picker-item p {
     overflow-wrap: anywhere;
@@ -1081,6 +1127,12 @@ pre {
 .picker-item p {
     color: var(--muted);
     line-height: 1.4;
+}
+
+.picker-item .reference-summary span,
+.slot-text .reference-summary span {
+    color: #dce4ee;
+    font-weight: 500;
 }
 
 .lora-picker-item {
