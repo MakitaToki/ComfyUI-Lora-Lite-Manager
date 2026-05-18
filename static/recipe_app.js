@@ -1,6 +1,6 @@
 import { collectionImageUrl, fetchArtworks } from "./collection_api.js";
 import { fetchLoras, previewUrl } from "./api.js";
-import { createExperimentRun, refreshExperimentRun, submitExperimentRunStep, previewExperiment } from "./experiment_api.js";
+import { createExperimentRun, fetchExperimentRun, refreshExperimentRun, submitExperimentRunStep, previewExperiment } from "./experiment_api.js";
 
 const state = {
     artworks: [],
@@ -12,6 +12,8 @@ const state = {
     jsonExpanded: false,
     latestPreview: null,
     activeRunId: "",
+    runPollTimer: 0,
+    isPollingRun: false,
     loras: [
         { name: "Pvnk_styl2.safetensors", strengths: [0.4, 0.6, 0.8] },
     ],
@@ -65,6 +67,7 @@ async function init() {
     bindEvents();
     renderAll();
     await Promise.all([loadArtworks(), loadLoras()]);
+    await restoreRecipeFromRunParam();
 }
 
 function bindEvents() {
@@ -136,6 +139,63 @@ async function loadLoras() {
     } catch (error) {
         showToast(`LoRA 列表读取失败：${error.message}`, true);
     }
+}
+
+async function restoreRecipeFromRunParam() {
+    const runId = new URLSearchParams(window.location.search).get("run_id");
+    if (!runId) {
+        return;
+    }
+    try {
+        const result = await fetchExperimentRun(runId);
+        applyRecipe(result.run?.recipe || {});
+        window.history.replaceState(null, "", "/recipe-lite");
+        showToast(`已恢复历史配方：${runId}`);
+    } catch (error) {
+        showToast(`恢复历史配方失败：${error.message}`, true);
+    }
+}
+
+function applyRecipe(recipe) {
+    state.main = recipe.main_artwork ? recipeArtwork(recipe.main_artwork) : null;
+    state.refs = (Array.isArray(recipe.visual_references) ? recipe.visual_references : [])
+        .map((item) => ({ ...recipeArtwork(item), usage: item.usage || "参考构图" }));
+    state.loras = (Array.isArray(recipe.lora_matrix) ? recipe.lora_matrix : [])
+        .map((item) => ({
+            name: item.name || "",
+            strengths: Array.isArray(item.strengths) ? item.strengths : [0.7],
+            notes: item.notes || "",
+            trigger_words: Array.isArray(item.trigger_words) ? item.trigger_words : [],
+            base_model: item.base_model || "",
+            source_url: item.source_url || "",
+            download_url: item.download_url || "",
+        }))
+        .filter((item) => item.name);
+    const generation = recipe.generation || {};
+    els.checkpointInput.value = generation.checkpoint || "";
+    els.stepsInput.value = generation.steps || 22;
+    els.widthInput.value = generation.width || 832;
+    els.heightInput.value = generation.height || 1216;
+    els.seedsInput.value = (Array.isArray(recipe.seeds) ? recipe.seeds : []).join(", ") || "123456, 234567";
+    els.promptModeInput.value = recipe.prompt_mode || "danbooru";
+    renderAll();
+}
+
+function recipeArtwork(ref) {
+    const existing = state.artworks.find((item) => item.id === ref.id);
+    if (existing) {
+        return existing;
+    }
+    return {
+        ...ref,
+        meta: { title: ref.title || ref.id || "" },
+        user_notes: ref.title || ref.id || "",
+        raw_tags: [],
+        visual_structure: {},
+        design_language: {},
+        positive_prompt: ref.positive_prompt || "",
+        negative_prompt: ref.negative_prompt || "",
+    };
 }
 
 function openPicker(mode) {
@@ -449,6 +509,7 @@ async function handleRunExperiment() {
         const finalStage = stats.error ? "error" : run.status === "completed" ? "done" : "queue";
         const finalTitle = stats.error ? "部分 case 失败" : run.status === "completed" ? "已完成" : "等待 ComfyUI 队列 / 执行";
         setRunProgress(run, finalStage, finalTitle, latestRunMessage(run));
+        startRecipeRunPolling(run);
         showToast(`Experiment run created: ${run.run_id}`);
     } catch (error) {
         setRunProgress(null, "error", "创建 run 失败", error.message, { error });
@@ -517,12 +578,13 @@ function setRunProgress(run, stage, title, message, options = {}) {
     els.runProgressMessage.textContent = message || "";
     els.runProgressPanel.dataset.stage = stage;
     const stats = runStats(run);
-    const percent = stats.total ? Math.round(((stats.queued + stats.completed + stats.error) / stats.total) * 100) : 0;
+    const percent = stats.total ? Math.round(((stats.queued + stats.running + stats.completed + stats.error) / stats.total) * 100) : 0;
     els.runProgressBar.style.width = `${percent}%`;
     els.runProgressStats.innerHTML = `
         <span>总数 ${stats.total}</span>
         <span>待提交 ${stats.pending}</span>
         <span>已进队列 ${stats.queued}</span>
+        <span>执行中 ${stats.running}</span>
         <span>完成 ${stats.completed}</span>
         <span>失败 ${stats.error}</span>
     `;
@@ -540,6 +602,7 @@ function runStats(run) {
         total,
         pending: submissions.filter((item) => item.status === "pending").length,
         queued: submissions.filter((item) => ["queued", "submitted"].includes(item.status)).length,
+        running: submissions.filter((item) => item.status === "running").length,
         completed: submissions.filter((item) => item.status === "completed").length,
         error: submissions.filter((item) => item.status === "error").length,
     };
@@ -554,10 +617,49 @@ function latestRunMessage(run) {
     if (stats.pending) {
         return `还剩 ${stats.pending} 个 case 等待提交。`;
     }
+    if (stats.running) {
+        return `${stats.running} 个 case 正在 ComfyUI 执行，${stats.completed} 个已完成。`;
+    }
     if (run?.status === "completed") {
         return "ComfyUI 已生成完成。";
     }
     return "所有 case 已提交到 ComfyUI，正在等待队列或执行。";
+}
+
+function startRecipeRunPolling(run) {
+    window.clearTimeout(state.runPollTimer);
+    state.activeRunId = run?.run_id || "";
+    if (!isLiveRun(run)) {
+        return;
+    }
+    state.runPollTimer = window.setTimeout(pollRecipeRun, 3000);
+}
+
+async function pollRecipeRun() {
+    if (!state.activeRunId || state.isPollingRun) {
+        return;
+    }
+    state.isPollingRun = true;
+    try {
+        const result = await refreshExperimentRun(state.activeRunId);
+        const run = result.run;
+        const stats = runStats(run);
+        const stage = stats.error ? "error" : run.status === "completed" ? "done" : stats.running ? "queue" : "queue";
+        const title = stats.error ? "部分 case 失败" : run.status === "completed" ? "已完成" : "等待 ComfyUI 队列 / 执行";
+        setRunProgress(run, stage, title, latestRunMessage(run));
+        if (isLiveRun(run)) {
+            state.runPollTimer = window.setTimeout(pollRecipeRun, 3000);
+        }
+    } catch (error) {
+        showToast(error.message, true);
+        state.runPollTimer = window.setTimeout(pollRecipeRun, 5000);
+    } finally {
+        state.isPollingRun = false;
+    }
+}
+
+function isLiveRun(run) {
+    return ["submitting", "queued", "running"].includes(run?.status);
 }
 
 function renderRunDiagnostics(run, generalError) {
@@ -673,7 +775,7 @@ function diagnosticText(run, generalError) {
     const lines = [
         `run_id: ${run?.run_id || "-"}`,
         `status: ${run?.status || "-"}`,
-        `total: ${stats.total}, pending: ${stats.pending}, queued: ${stats.queued}, completed: ${stats.completed}, error: ${stats.error}`,
+        `total: ${stats.total}, pending: ${stats.pending}, queued: ${stats.queued}, running: ${stats.running}, completed: ${stats.completed}, error: ${stats.error}`,
     ];
     if (generalError) {
         lines.push(`general_error: ${generalError.message || String(generalError)}`);

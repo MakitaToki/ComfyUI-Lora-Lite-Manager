@@ -214,6 +214,33 @@ def test_refresh_run_records_history_diagnostics(tmp_path: Path, monkeypatch):
     assert "history timed out" in failed["error_detail"]
 
 
+def test_refresh_run_marks_running_from_comfyui_queue(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(service, "DB_PATH", tmp_path / "experiments.sqlite3")
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+    monkeypatch.setattr(service, "read_json", lambda _path: {"workflow": True})
+    monkeypatch.setattr(service, "patch_workflow", lambda workflow, case: workflow)
+    monkeypatch.setattr(service, "submit_prompt", lambda _url, _workflow: "prompt-1")
+    monkeypatch.setattr(service, "_fetch_history", lambda _url, _prompt_id: None)
+    monkeypatch.setattr(service, "_fetch_queue", lambda _url: {"queue_running": [[1, "prompt-1", {}]], "queue_pending": []})
+
+    run = service.create_run(
+        {
+            "main_artwork": {"id": "main"},
+            "lora_matrix": [],
+            "seeds": [123],
+            "generation": {"checkpoint": "model.safetensors"},
+        },
+        submit=False,
+    )
+    queued = service.submit_run_step(run["run_id"], batch_size=1)
+    assert queued is not None
+
+    refreshed = service.refresh_run(run["run_id"])
+    assert refreshed is not None
+    assert refreshed["status"] == "running"
+    assert refreshed["submissions"][0]["status"] == "running"
+
+
 def test_workflow_patch_receives_multiple_loras(monkeypatch):
     monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
     preview = service.build_experiment_preview(

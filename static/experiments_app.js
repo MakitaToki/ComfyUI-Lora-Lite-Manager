@@ -3,6 +3,8 @@ import { fetchExperimentRun, fetchExperimentRuns, refreshExperimentRun } from ".
 const state = {
     runs: [],
     selectedRun: null,
+    pollTimer: 0,
+    isPolling: false,
 };
 
 const els = {
@@ -15,6 +17,7 @@ const els = {
     runTitle: document.querySelector("#runTitle"),
     runMeta: document.querySelector("#runMeta"),
     runProgress: document.querySelector("#runProgress"),
+    restoreRecipeBtn: document.querySelector("#restoreRecipeBtn"),
     runSummary: document.querySelector("#runSummary"),
     resultGrid: document.querySelector("#resultGrid"),
     resultDialog: document.querySelector("#resultDialog"),
@@ -52,6 +55,13 @@ function bindEvents() {
             closeResultDialog();
         }
     });
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            stopPolling();
+        } else if (isLiveRun(state.selectedRun)) {
+            schedulePoll(300);
+        }
+    });
 }
 
 async function loadRuns() {
@@ -72,6 +82,7 @@ async function selectRun(runId) {
         window.history.replaceState(null, "", `/experiments-lite?run_id=${encodeURIComponent(runId)}`);
         renderRunList();
         renderRun();
+        restartPolling();
     } catch (error) {
         showToast(error.message, true);
     }
@@ -88,6 +99,7 @@ async function refreshSelectedRun() {
         state.selectedRun = result.run;
         await loadRuns();
         renderRun();
+        restartPolling();
         showToast("Run refreshed");
     } catch (error) {
         showToast(error.message, true);
@@ -115,7 +127,7 @@ function renderRunList() {
         button.addEventListener("click", () => selectRun(run.run_id));
         button.innerHTML = `
             <strong>${escapeHtml(run.run_id)}</strong>
-            <span>${escapeHtml(run.status)} · submitted ${stats.submitted}/${stats.total} · done ${stats.completed} · failed ${stats.error}</span>
+            <span>${escapeHtml(run.status)} · queued ${stats.queued} · running ${stats.running} · done ${stats.completed} · failed ${stats.error}</span>
             <span>${escapeHtml(run.created_at || "")}</span>
         `;
         els.runList.append(button);
@@ -136,12 +148,16 @@ function renderRun() {
     els.runStatus.textContent = run.status;
     els.runTitle.textContent = run.run_id;
     els.runMeta.textContent = `${run.created_at} · ${summary.total || 0} cases · ${run.workflow || ""}`;
-    els.runProgress.textContent = `${stats.submitted} / ${stats.total}`;
+    els.runProgress.textContent = `${stats.completed} / ${stats.total}`;
+    els.restoreRecipeBtn.href = `/recipe-lite?run_id=${encodeURIComponent(run.run_id)}`;
     els.runSummary.innerHTML = `
         <div><strong>${summary.total || 0}</strong><span>cases</span></div>
         <div><strong>${preview.prompt_variants?.length || 0}</strong><span>prompt variants</span></div>
         <div><strong>${preview.lora_combos?.length || 0}</strong><span>LoRA combos</span></div>
         <div><strong>${preview.strengths?.join(", ") || "-"}</strong><span>strengths</span></div>
+        <div><strong>${stats.queued}</strong><span>queued</span></div>
+        <div><strong>${stats.running}</strong><span>running</span></div>
+        <div><strong>${stats.error}</strong><span>failed</span></div>
     `;
     renderResultGrid(run);
 }
@@ -149,15 +165,59 @@ function renderRun() {
 function runListStats(run) {
     const submissions = run.submissions || [];
     const total = run.total || run.preview?.summary?.total || submissions.length || 0;
-    const queued = submissions.filter((item) => ["queued", "submitted"].includes(item.status)).length;
+    const queued = run.queued ?? submissions.filter((item) => ["queued", "submitted"].includes(item.status)).length;
+    const running = run.running ?? submissions.filter((item) => item.status === "running").length;
     const completed = run.completed ?? submissions.filter((item) => item.status === "completed").length;
-    const error = submissions.filter((item) => item.status === "error").length;
+    const error = run.error ?? submissions.filter((item) => item.status === "error").length;
     return {
         total,
-        submitted: queued + completed + error,
+        queued,
+        running,
+        submitted: queued + running + completed + error,
         completed,
         error,
     };
+}
+
+function isLiveRun(run) {
+    return ["submitting", "queued", "running"].includes(run?.status);
+}
+
+function restartPolling() {
+    stopPolling();
+    if (isLiveRun(state.selectedRun) && !document.hidden) {
+        schedulePoll();
+    }
+}
+
+function schedulePoll(delay = 3000) {
+    window.clearTimeout(state.pollTimer);
+    state.pollTimer = window.setTimeout(pollSelectedRun, delay);
+}
+
+async function pollSelectedRun() {
+    if (!isLiveRun(state.selectedRun) || state.isPolling || document.hidden) {
+        return;
+    }
+    state.isPolling = true;
+    try {
+        const result = await refreshExperimentRun(state.selectedRun.run_id);
+        state.selectedRun = result.run;
+        await loadRuns();
+        renderRun();
+    } catch (error) {
+        showToast(error.message, true);
+    } finally {
+        state.isPolling = false;
+        if (isLiveRun(state.selectedRun) && !document.hidden) {
+            schedulePoll();
+        }
+    }
+}
+
+function stopPolling() {
+    window.clearTimeout(state.pollTimer);
+    state.pollTimer = 0;
 }
 
 function renderResultGrid(run) {

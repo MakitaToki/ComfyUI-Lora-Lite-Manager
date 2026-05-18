@@ -222,13 +222,12 @@ def refresh_run(run_id: str) -> dict[str, Any] | None:
         return None
 
     changed = False
-    all_done = bool(run["submissions"])
-    any_error = False
+    queue = _fetch_queue(run["comfyui_url"])
+    running_prompt_ids = _queue_prompt_ids(queue.get("queue_running", []))
+    pending_prompt_ids = _queue_prompt_ids(queue.get("queue_pending", []))
     for submission in run["submissions"]:
         prompt_id = submission.get("prompt_id")
         if submission.get("status") in {"pending", "completed"} or not prompt_id:
-            any_error = any_error or submission.get("status") == "error"
-            all_done = all_done and submission.get("status") == "completed"
             continue
         try:
             history = _fetch_history(run["comfyui_url"], str(prompt_id))
@@ -240,16 +239,26 @@ def refresh_run(run_id: str) -> dict[str, Any] | None:
                 for key in ("error", "error_type", "error_message", "error_detail"):
                     submission.pop(key, None)
                 changed = True
-            else:
-                all_done = False
         except Exception as exc:
             _mark_submission_error(submission, exc, stage="history")
-            any_error = True
             changed = True
+            continue
+        if history:
+            continue
+        previous_status = submission.get("status")
+        if str(prompt_id) in running_prompt_ids:
+            submission["status"] = "running"
+            submission["stage"] = "queue"
+        elif str(prompt_id) in pending_prompt_ids:
+            submission["status"] = "queued"
+            submission["stage"] = "queue"
+        else:
+            submission["status"] = "queued"
+            submission["stage"] = "queue"
+            submission["diagnostic_message"] = "Prompt has been submitted but is not currently visible in ComfyUI queue or history."
+        changed = changed or previous_status != submission.get("status")
 
     status = _run_status_from_submissions(run["submissions"]) if run["submissions"] else run["status"]
-    if status == "queued" and any(submission.get("status") == "completed" for submission in run["submissions"]):
-        status = "running"
     if changed or status != run["status"]:
         _update_run(run_id, status=status, submissions=_strip_cases(run["submissions"]))
     return get_run(run_id)
@@ -490,14 +499,36 @@ def _run_status_from_submissions(submissions: list[dict[str, Any]]) -> str:
         for item in submissions
     ]
     if any(status == "pending" for status in statuses):
-        return "submitting" if any(status in {"queued", "completed", "error"} for status in statuses) else "draft"
+        return "submitting" if any(status in {"queued", "running", "completed", "error"} for status in statuses) else "draft"
     if all(status == "completed" for status in statuses):
         return "completed"
+    if any(status == "running" for status in statuses):
+        return "running"
     if any(status == "queued" for status in statuses):
         return "queued"
     if any(status == "completed" for status in statuses):
         return "running"
     return "error" if any(status == "error" for status in statuses) else "draft"
+
+
+def _fetch_queue(comfyui_url: str) -> dict[str, Any]:
+    url = f"{comfyui_url.rstrip('/')}/queue"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _queue_prompt_ids(items: Any) -> set[str]:
+    prompt_ids: set[str] = set()
+    for item in items if isinstance(items, list) else []:
+        if isinstance(item, (list, tuple)) and len(item) > 1:
+            prompt_ids.add(str(item[1]))
+        elif isinstance(item, dict) and item.get("prompt_id"):
+            prompt_ids.add(str(item.get("prompt_id")))
+    return prompt_ids
 
 
 def _fetch_history(comfyui_url: str, prompt_id: str) -> dict[str, Any] | None:
@@ -576,6 +607,9 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
     preview = json.loads(row["preview_json"])
     submissions = json.loads(row["submissions_json"])
     completed = sum(1 for item in submissions if item.get("status") == "completed")
+    running = sum(1 for item in submissions if item.get("status") == "running")
+    queued = sum(1 for item in submissions if item.get("status") in {"queued", "submitted"})
+    failed = sum(1 for item in submissions if item.get("status") == "error")
     return {
         "run_id": row["run_id"],
         "status": row["status"],
@@ -583,6 +617,9 @@ def _run_summary(row: sqlite3.Row) -> dict[str, Any]:
         "updated_at": row["updated_at"],
         "total": preview.get("summary", {}).get("total", 0),
         "completed": completed,
+        "running": running,
+        "queued": queued,
+        "error": failed,
         "comfyui_url": row["comfyui_url"],
     }
 
