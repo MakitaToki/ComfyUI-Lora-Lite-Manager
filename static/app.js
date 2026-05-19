@@ -38,6 +38,8 @@ const els = {
     downloadInput: document.getElementById("downloadInput"),
     downloadRoot: document.getElementById("downloadRoot"),
     downloadSubdir: document.getElementById("downloadSubdir"),
+    downloadStatus: document.getElementById("downloadStatus"),
+    downloadSubmitBtn: document.getElementById("downloadSubmitBtn"),
     settingsDrawer: document.getElementById("settingsDrawer"),
     closeSettingsBtn: document.getElementById("closeSettingsBtn"),
     settingsForm: document.getElementById("settingsForm"),
@@ -402,6 +404,7 @@ async function submitDownload(event) {
     }
 
     setBusy(true, "正在下载 LoRA...");
+    setDownloadStatus("下载已开始，正在连接 Civitai。大文件可能需要几分钟，请保持此窗口打开。");
     try {
         await downloadLora({
             modelVersionId: parsed.modelVersionId,
@@ -415,6 +418,7 @@ async function submitDownload(event) {
         await loadLoras({ quiet: true });
         toast("下载完成", "success");
     } catch (error) {
+        setDownloadStatus(error.message || "下载失败，请检查网络或 Civitai API key。", true);
         toast(error.message, "error");
     } finally {
         setBusy(false);
@@ -506,9 +510,22 @@ function setBusy(isBusy, message = "") {
     els.settingsBtn.disabled = isBusy;
     els.refreshBtn.disabled = isBusy;
     els.downloadPanelBtn.disabled = isBusy;
+    if (els.downloadSubmitBtn) {
+        els.downloadSubmitBtn.disabled = isBusy;
+        els.downloadSubmitBtn.textContent = isBusy ? "下载中..." : "开始下载";
+    }
     if (message) {
         els.summary.textContent = message;
     }
+}
+
+function setDownloadStatus(message, isError = false) {
+    if (!els.downloadStatus) {
+        return;
+    }
+    els.downloadStatus.hidden = !message;
+    els.downloadStatus.textContent = message || "";
+    els.downloadStatus.classList.toggle("error-text", Boolean(isError));
 }
 
 function escapeHtml(value) {
@@ -537,10 +554,12 @@ function bindEvents() {
     });
     els.downloadPanelBtn.addEventListener("click", () => {
         els.downloadDrawer.hidden = false;
+        setDownloadStatus("");
         els.downloadInput.focus();
     });
     els.closeDownloadBtn.addEventListener("click", () => {
         els.downloadDrawer.hidden = true;
+        setDownloadStatus("");
     });
     els.downloadDrawer.addEventListener("click", (event) => {
         if (event.target === els.downloadDrawer) {

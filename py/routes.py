@@ -216,7 +216,12 @@ async def download_lora(request: web.Request) -> web.Response:
 
         download_url = file_info.get("downloadUrl") or f"{CIVITAI_DOWNLOAD_PREFIX}{model_version_id}"
         download_url = normalize_download_url(str(download_url))
-        result_path = await Downloader().download_file(download_url, save_path, use_auth=True)
+        result_path = await Downloader().download_file(
+            download_url,
+            save_path,
+            use_auth=True,
+            expected_size=_file_size_bytes(file_info),
+        )
 
         metadata = _metadata_from_version(version, file_info, result_path)
         save_metadata(result_path, metadata)
@@ -273,6 +278,14 @@ def _unique_path(path: Path) -> Path:
         if not candidate.exists():
             return candidate
         index += 1
+
+
+def _file_size_bytes(file_info: dict[str, Any]) -> int | None:
+    size_kb = file_info.get("sizeKB")
+    try:
+        return int(float(size_kb) * 1024) if size_kb else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _delete_candidates(model_path: Path) -> list[Path]:

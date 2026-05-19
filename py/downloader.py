@@ -56,15 +56,28 @@ class Downloader:
         save_path: str | Path,
         *,
         use_auth: bool = False,
+        expected_size: int | None = None,
     ) -> str:
         target = Path(save_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         part_path = Path(str(target) + ".part")
+        if expected_size and part_path.exists() and part_path.stat().st_size > expected_size:
+            part_path.unlink()
 
         last_error = ""
         for attempt in range(self.config.max_retries + 1):
             try:
-                await self._download_once(url, target, part_path, use_auth=use_auth)
+                await self._download_once(
+                    url,
+                    target,
+                    part_path,
+                    use_auth=use_auth,
+                    expected_size=expected_size,
+                )
+                if expected_size and part_path.stat().st_size > expected_size:
+                    raise DownloadError(
+                        f"Downloaded file is larger than expected ({part_path.stat().st_size} > {expected_size})"
+                    )
                 os.replace(part_path, target)
                 return str(target)
             except Exception as exc:
@@ -88,8 +101,13 @@ class Downloader:
         part_path: Path,
         *,
         use_auth: bool,
+        expected_size: int | None,
     ) -> None:
         resume_offset = part_path.stat().st_size if part_path.exists() else 0
+        if expected_size and resume_offset >= expected_size:
+            part_path.unlink()
+            resume_offset = 0
+
         headers = self._headers(use_auth=use_auth)
         headers["Accept-Encoding"] = "identity"
         if resume_offset:
@@ -124,6 +142,10 @@ class Downloader:
 
         if not part_path.exists() or part_path.stat().st_size <= 0:
             raise DownloadError("Downloaded file is empty")
+        if expected_size and part_path.stat().st_size < expected_size:
+            raise DownloadError(
+                f"Downloaded file is incomplete ({part_path.stat().st_size} < {expected_size})"
+            )
 
     def _headers(self, *, use_auth: bool) -> dict[str, str]:
         headers = {
@@ -147,5 +169,5 @@ class Downloader:
         return proxy_url
 
     def _client_session(self) -> aiohttp.ClientSession:
-        timeout = aiohttp.ClientTimeout(total=None, connect=60, sock_read=300)
+        timeout = aiohttp.ClientTimeout(total=None, connect=30, sock_read=45)
         return aiohttp.ClientSession(timeout=timeout, trust_env=self.config.proxy.url is None)

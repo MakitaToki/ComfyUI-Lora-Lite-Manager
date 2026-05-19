@@ -439,6 +439,17 @@ textarea:focus {
     line-height: 1.45;
 }
 
+.muted {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.error-text {
+    color: #ffb4b4;
+}
+
 .drawer {
     position: fixed;
     inset: 0;
