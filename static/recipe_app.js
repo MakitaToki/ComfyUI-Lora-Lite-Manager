@@ -2,6 +2,8 @@ import { collectionImageUrl, fetchArtworks } from "./collection_api.js";
 import { fetchLoras, previewUrl } from "./api.js";
 import { createExperimentRun, fetchExperimentRun, refreshExperimentRun, submitExperimentRunStep, previewExperiment } from "./experiment_api.js";
 
+const FIXED_LORA_STRENGTH = 1;
+
 const state = {
     artworks: [],
     loraItems: [],
@@ -15,7 +17,7 @@ const state = {
     runPollTimer: 0,
     isPollingRun: false,
     loras: [
-        { name: "Pvnk_styl2.safetensors", strengths: [0.4, 0.6, 0.8] },
+        { name: "Pvnk_styl2.safetensors", strengths: [FIXED_LORA_STRENGTH] },
     ],
 };
 
@@ -95,6 +97,9 @@ function bindEvents() {
         input.addEventListener("input", renderPreview);
     }
     els.promptModeInput.addEventListener("change", renderPreview);
+    if (els.loraStrengthInput) {
+        els.loraStrengthInput.value = String(FIXED_LORA_STRENGTH);
+    }
     els.previewExperimentBtn.addEventListener("click", handlePreviewExperiment);
     els.runExperimentBtn.addEventListener("click", handleRunExperiment);
     els.toggleJsonBtn.addEventListener("click", toggleJsonPreview);
@@ -165,7 +170,7 @@ function applyRecipe(recipe) {
     state.loras = (Array.isArray(recipe.lora_matrix) ? recipe.lora_matrix : [])
         .map((item) => ({
             name: item.name || "",
-            strengths: Array.isArray(item.strengths) ? item.strengths : [0.7],
+            strengths: fixedStrengths(),
             notes: item.notes || "",
             trigger_words: Array.isArray(item.trigger_words) ? item.trigger_words : [],
             base_model: item.base_model || "",
@@ -334,7 +339,7 @@ function chooseLora(item) {
     if (!state.loras.some((lora) => lora.name === item.file_name)) {
         state.loras.push({
             name: item.file_name,
-            strengths: [0.4, 0.6, 0.8],
+            strengths: fixedStrengths(),
             notes: loraNotes(item),
             trigger_words: loraTriggerWords(item),
             base_model: item.base_model || "",
@@ -432,14 +437,15 @@ function renderLoras() {
 function addLora(event) {
     event.preventDefault();
     const name = els.loraNameInput.value.trim();
-    const strengths = parseNumberList(els.loraStrengthInput.value);
-    if (!name || !strengths.length) {
-        showToast("请填写 LoRA 文件名和至少一个强度", true);
+    if (!name) {
+        showToast("请填写 LoRA 文件名", true);
         return;
     }
-    state.loras.push({ name, strengths });
+    state.loras.push({ name, strengths: fixedStrengths() });
     els.loraNameInput.value = "";
-    els.loraStrengthInput.value = "";
+    if (els.loraStrengthInput) {
+        els.loraStrengthInput.value = String(FIXED_LORA_STRENGTH);
+    }
     renderAll();
 }
 
@@ -820,7 +826,7 @@ function buildRecipe() {
         visual_references: state.refs.map((item) => ({ ...artworkRef(item), usage: item.usage })),
         lora_matrix: state.loras.map((item) => ({
             name: item.name,
-            strengths: item.strengths,
+            strengths: fixedStrengths(),
             notes: item.notes || "",
             trigger_words: item.trigger_words || [],
             base_model: item.base_model || "",
@@ -856,7 +862,11 @@ function loraNotes(item) {
 }
 
 function uniqueStrengths() {
-    return [...new Set(state.loras.flatMap((item) => item.strengths).map((value) => Number(value)).filter((value) => Number.isFinite(value)))];
+    return fixedStrengths();
+}
+
+function fixedStrengths() {
+    return [FIXED_LORA_STRENGTH];
 }
 
 function loraTriggerWords(item) {

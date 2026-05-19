@@ -26,6 +26,7 @@ EXPERIMENT_DIR = PLUGIN_ROOT / "data" / "experiments"
 DB_PATH = EXPERIMENT_DIR / "experiments.sqlite3"
 DEFAULT_NEGATIVE = "bad quality, worst quality, sketch, bad hands, bad anatomy, watermark, signature"
 DEFAULT_COMFYUI_URL = "http://127.0.0.1:8188"
+FIXED_TEST_LORA_STRENGTH = 1.0
 
 
 def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
@@ -718,14 +719,7 @@ def _fixed_loras_for_variant(loras: list[dict[str, Any]], variant: dict[str, Any
 
 
 def _strengths(loras_raw: Any) -> list[float]:
-    values: list[float] = []
-    for item in loras_raw if isinstance(loras_raw, list) else []:
-        for value in item.get("strengths", []) if isinstance(item.get("strengths"), list) else []:
-            try:
-                values.append(round(float(value), 3))
-            except (TypeError, ValueError):
-                pass
-    return sorted(dict.fromkeys(values)) or [0.7]
+    return [FIXED_TEST_LORA_STRENGTH]
 
 
 def _seeds(raw: Any) -> list[int]:

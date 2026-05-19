@@ -18,7 +18,7 @@
         <nav class="main-tabs" aria-label="主菜单">
             <a class="tab" href="/lora-lite">LoRA</a>
             <a class="tab" href="/collection-lite">作品集</a>
-            <a class="tab active" href="/lora-lite-static/recipe.html">Recipe</a>
+            <a class="tab active" href="/recipe-lite">Recipe</a>
             <a class="tab" href="/experiments-lite">Experiment</a>
         </nav>
         <nav class="topbar-actions">
@@ -103,7 +103,7 @@
                         <div id="loraRows" class="lora-rows"></div>
                         <form id="loraForm" class="inline-form">
                             <input id="loraNameInput" placeholder="LoRA 文件名，例如 Pvnk_styl2.safetensors">
-                            <input id="loraStrengthInput" placeholder="强度，例如 0.4, 0.6, 0.8">
+                            <input id="loraStrengthInput" type="hidden" value="1">
                             <button class="button secondary" type="submit">添加</button>
                         </form>
                     </article>

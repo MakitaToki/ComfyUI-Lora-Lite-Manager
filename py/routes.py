@@ -49,12 +49,12 @@ def register_routes() -> None:
 
 async def lora_lite_page(request: web.Request) -> web.Response:
     html_path = PLUGIN_ROOT / "static" / "index.html"
-    return web.FileResponse(html_path)
+    return _html_response(html_path)
 
 
 async def recipe_lite_page(request: web.Request) -> web.Response:
     html_path = PLUGIN_ROOT / "static" / "recipe.html"
-    return web.FileResponse(html_path)
+    return _html_response(html_path)
 
 
 async def get_roots(request: web.Request) -> web.Response:
@@ -301,6 +301,12 @@ def _add_static_route(app: web.Application, prefix: str, path: Path) -> None:
         if getattr(resource, "canonical", None) == prefix:
             return
     app.router.add_static(prefix, path)
+
+
+def _html_response(path: Path) -> web.FileResponse:
+    response = web.FileResponse(path)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _is_relative_to(path: Path, root: Path) -> bool:

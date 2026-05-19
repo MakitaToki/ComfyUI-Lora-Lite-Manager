@@ -31,7 +31,7 @@ def test_preview_expands_baseline_single_and_pair_lora_combos(monkeypatch):
 
     assert len(preview["prompt_variants"]) == 3
     assert len(preview["lora_combos"]) == 7
-    assert preview["summary"]["total"] == 3 * 7 * 3 * 2
+    assert preview["summary"]["total"] == 3 * 7 * 1 * 2
     assert preview["cases"][0]["generation"]["sampler"] == "dpmpp_2m"
     assert preview["cases"][0]["generation"]["scheduler"] == "karras"
     assert preview["lora_combos"][0]["id"] == "baseline_no_lora"
@@ -53,9 +53,9 @@ def test_pair_combo_uses_synchronized_strength(monkeypatch):
         }
     )
 
-    pair_case = next(case for case in preview["cases"] if case["lora_combo_id"].startswith("pair_") and case["strength"] == 0.8)
-    assert [lora["strength"] for lora in pair_case["models"]["loras"]] == [0.8, 0.8]
-    assert [lora["clipStrength"] for lora in pair_case["models"]["loras"]] == [0.8, 0.8]
+    pair_case = next(case for case in preview["cases"] if case["lora_combo_id"].startswith("pair_") and case["strength"] == 1.0)
+    assert [lora["strength"] for lora in pair_case["models"]["loras"]] == [1.0, 1.0]
+    assert [lora["clipStrength"] for lora in pair_case["models"]["loras"]] == [1.0, 1.0]
 
 
 def test_prompt_variant_replaces_main_red_box_terms_by_reference_usage(monkeypatch):
@@ -303,8 +303,8 @@ def test_workflow_patch_receives_multiple_loras(monkeypatch):
     workflow = service.patch_workflow(service.read_json(service.DEFAULT_WORKFLOW), pair_case)
 
     assert workflow["3"]["inputs"]["loras"]["__value__"] == [
-        {"name": "a.safetensors", "strength": 0.6, "clipStrength": 0.6, "active": True},
-        {"name": "b.safetensors", "strength": 0.6, "clipStrength": 0.6, "active": True},
+        {"name": "a.safetensors", "strength": 1.0, "clipStrength": 1.0, "active": True},
+        {"name": "b.safetensors", "strength": 1.0, "clipStrength": 1.0, "active": True},
     ]
     assert workflow["7"]["inputs"]["seed"] == 123
 
