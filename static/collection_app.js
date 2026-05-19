@@ -187,7 +187,7 @@ function renderGrid() {
         card.addEventListener("click", () => selectItem(item.id));
 
         const img = document.createElement("img");
-        img.loading = "lazy";
+        img.loading = "eager";
         img.src = collectionImageUrl(item.preview_path || item.image_url);
         img.alt = firstTag(item) || item.source_id;
         card.append(img);

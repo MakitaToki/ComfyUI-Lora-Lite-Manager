@@ -48,16 +48,21 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
     lora_combos = _lora_combos(recipe.get("lora_matrix", []))
     strengths = _strengths(recipe.get("lora_matrix", []))
     seeds = _seeds(recipe.get("seeds", []))
-    generation = _generation(recipe.get("generation", {}))
+    fixed_loras = _fixed_loras(recipe.get("fixed_loras", []))
+    source_generation = _source_generation(recipe.get("main_artwork"), main)
+    generation = _generation(recipe.get("generation", {}), source_generation)
+    workflow_support = _source_generation_workflow_support(source_generation)
 
     cases: list[dict[str, Any]] = []
     for variant, combo, strength, seed in itertools.product(prompt_variants, lora_combos, strengths, seeds):
-        loras = [
+        variant_fixed_loras = _fixed_loras_for_variant(fixed_loras, variant)
+        loras = variant_fixed_loras + [
             {
                 "name": lora["name"],
                 "strength": strength,
                 "clipStrength": strength,
                 "active": True,
+                "role": "test",
             }
             for lora in combo["loras"]
         ]
@@ -70,6 +75,7 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
                 "prompt_variant_label": variant["label"],
                 "lora_combo_id": combo["id"],
                 "lora_combo_label": combo["label"],
+                "fixed_loras": variant_fixed_loras,
                 "strength": strength,
                 "seed": seed,
                 "source_artwork_ids": [main.get("id", "")],
@@ -96,6 +102,8 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
                     "clip_skip": generation["clip_skip"],
                     "batch_size": generation["batch_size"],
                 },
+                "source_generation": source_generation,
+                "workflow_support": workflow_support,
                 "output": {
                     "filename_prefix": f"lora_lite_exp_{case_id}",
                 },
@@ -117,6 +125,8 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
         "lora_combos": lora_combos,
         "strengths": strengths,
         "seeds": seeds,
+        "source_generation": source_generation,
+        "workflow_support": workflow_support,
         "cases": cases,
     }
 
@@ -287,9 +297,121 @@ def init_db(db_path: Path | None = None) -> None:
 
 
 def _prompt_variants(main: dict[str, Any], refs: list[dict[str, Any]], prompt_mode: str) -> list[dict[str, Any]]:
-    base_positive = _string(main.get("positive_prompt")).strip()
+    base_terms = _prompt_base_terms(main)
+    base_positive = _join_terms(base_terms) or _string(main.get("positive_prompt")).strip()
     base_negative = _string(main.get("negative_prompt")).strip() or DEFAULT_NEGATIVE
-    variants = [
+    role_ref = _reference_by_usage(refs, "role")
+    composition_ref = _reference_by_usage(refs, "composition")
+    variants: list[dict[str, Any]] = []
+
+    patches = _reference_patches(main, refs)
+    if patches:
+        for index, patch in enumerate(patches, start=1):
+            positive, matched_terms = _replace_prompt_terms(base_terms, patch["main_terms"], patch["terms"])
+            variants.append(
+                {
+                    "id": f"{patch['role']}_variant_{index}",
+                    "label": patch["label"],
+                    "positive": positive,
+                    "negative": _string(patch["ref"].get("negative_prompt")).strip() or base_negative,
+                    "tags": _split_terms(positive),
+                    "unmatched_terms": [],
+                    "source_artwork_id": patch["ref"].get("id", ""),
+                    "reference_patch": {
+                        "role": patch["role"],
+                        "field": patch["field"],
+                        "terms": patch["terms"],
+                        "matched_terms": matched_terms,
+                    },
+                    "mode": prompt_mode,
+                }
+            )
+
+        if len(patches) > 1:
+            positive, matched_by_role = _replace_prompt_terms_for_patches(base_terms, patches)
+            variants.append(
+                {
+                    "id": "_".join(patch["role"] for patch in patches) + "_variant",
+                    "label": "Combined reference variant",
+                    "positive": positive,
+                    "negative": base_negative,
+                    "tags": _split_terms(positive),
+                    "unmatched_terms": [],
+                    "source_artwork_id": ",".join(patch["ref"].get("id", "") for patch in patches if patch["ref"].get("id")),
+                    "reference_patch": {
+                        "role": "+".join(patch["role"] for patch in patches),
+                        "patches": [
+                            {
+                                "role": patch["role"],
+                                "field": patch["field"],
+                                "terms": patch["terms"],
+                                "matched_terms": matched_by_role.get(patch["role"], []),
+                            }
+                            for patch in patches
+                        ],
+                    },
+                    "mode": prompt_mode,
+                }
+            )
+        return variants
+
+    role_terms = _reference_field_terms(role_ref, "subject") if role_ref else []
+    if role_terms:
+        variants.append(
+            {
+                "id": "role_subject_variant",
+                "label": "角色/主体变体",
+                "positive": _join_prompt_parts(base_positive, role_terms),
+                "negative": _string(role_ref.get("negative_prompt")).strip() or base_negative,
+                "tags": role_terms,
+                "unmatched_terms": [],
+                "source_artwork_id": role_ref.get("id", ""),
+                "reference_patch": {"role": "subject", "terms": role_terms},
+                "mode": prompt_mode,
+            }
+        )
+
+    composition_terms = _reference_field_terms(composition_ref, "composition") if composition_ref else []
+    if composition_terms:
+        variants.append(
+            {
+                "id": "composition_variant",
+                "label": "构图变体",
+                "positive": _join_prompt_parts(base_positive, composition_terms),
+                "negative": _string(composition_ref.get("negative_prompt")).strip() or base_negative,
+                "tags": composition_terms,
+                "unmatched_terms": [],
+                "source_artwork_id": composition_ref.get("id", ""),
+                "reference_patch": {"role": "composition", "terms": composition_terms},
+                "mode": prompt_mode,
+            }
+        )
+
+    if role_terms and composition_terms:
+        variants.append(
+            {
+                "id": "role_subject_composition_variant",
+                "label": "角色/主体 + 构图变体",
+                "positive": _join_prompt_parts(base_positive, role_terms, composition_terms),
+                "negative": base_negative,
+                "tags": list(dict.fromkeys(role_terms + composition_terms)),
+                "unmatched_terms": [],
+                "source_artwork_id": ",".join(
+                    item.get("id", "") for item in [role_ref, composition_ref] if item and item.get("id")
+                ),
+                "reference_patch": {
+                    "role": "subject+composition",
+                    "subject_terms": role_terms,
+                    "composition_terms": composition_terms,
+                },
+                "mode": prompt_mode,
+            }
+        )
+
+    if variants:
+        return variants
+
+    return [
         {
             "id": "base_prompt",
             "label": "Base prompt",
@@ -301,23 +423,153 @@ def _prompt_variants(main: dict[str, Any], refs: list[dict[str, Any]], prompt_mo
             "mode": prompt_mode,
         }
     ]
-    for index, ref in enumerate(refs, start=1):
-        compiled = _compile_reference_terms(ref, prompt_mode)
-        if not compiled["prompt"]:
+    return variants
+
+
+def _prompt_base_terms(item: dict[str, Any]) -> list[str]:
+    visual = item.get("visual_structure") if isinstance(item.get("visual_structure"), dict) else {}
+    terms = _split_prompt_terms(_string(item.get("positive_prompt")))
+    terms.extend(_split_prompt_terms(visual.get("style_booster")))
+    return _dedupe_terms(terms)
+
+
+def _reference_patches(main: dict[str, Any], refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    patches: list[dict[str, Any]] = []
+    for index, ref in enumerate(refs):
+        field = _reference_usage_field(ref, index)
+        if not field:
             continue
-        variants.append(
+        terms = _reference_prompt_terms(ref, field)
+        if not terms:
+            continue
+        role = _field_role(field)
+        patches.append(
             {
-                "id": f"tag_variant_{index}",
-                "label": _title(ref) or f"Tag variant {index}",
-                "positive": ", ".join(part for part in [base_positive, compiled["prompt"]] if part),
-                "negative": _string(ref.get("negative_prompt")).strip() or base_negative,
-                "tags": compiled["tags"],
-                "unmatched_terms": compiled["unmatched_terms"],
-                "source_artwork_id": ref.get("id", ""),
-                "mode": prompt_mode,
+                "role": role,
+                "field": field,
+                "label": _field_label(field),
+                "ref": ref,
+                "terms": terms,
+                "main_terms": _reference_prompt_terms(main, field),
             }
         )
-    return variants
+    return patches
+
+
+def _reference_usage_field(ref: dict[str, Any], index: int) -> str:
+    usage = _string(ref.get("usage")).lower()
+    aliases = [
+        ("subject", ("role", "character", "subject", "\u89d2\u8272", "\u4e3b\u4f53")),
+        ("composition", ("composition", "\u6784\u56fe")),
+        ("color_palette", ("color", "palette", "\u8272\u5f69", "\u8272\u8c03")),
+        ("mood", ("mood", "atmosphere", "\u6c1b\u56f4", "\u60c5\u7eea")),
+        ("style_booster", ("style", "\u98ce\u683c")),
+    ]
+    for field, needles in aliases:
+        if any(needle in usage for needle in needles):
+            return field
+    if "\u4ec5" in usage or "note" in usage:
+        return ""
+    return "subject" if index == 0 else "composition"
+
+
+def _reference_prompt_terms(item: dict[str, Any], field: str) -> list[str]:
+    visual = item.get("visual_structure") if isinstance(item.get("visual_structure"), dict) else {}
+    design = item.get("design_language") if isinstance(item.get("design_language"), dict) else {}
+    values: list[Any] = [visual.get(field)]
+    if field == "composition":
+        values.append(design.get("layout"))
+    elif field == "subject":
+        values.append(design.get("imagery"))
+    elif field == "color_palette":
+        values.append(design.get("color"))
+    elif field == "style_booster":
+        values.append(design.get("post_process"))
+
+    terms: list[str] = []
+    for value in values:
+        terms.extend(_split_prompt_terms(value))
+    if not terms and field in {"subject", "composition"}:
+        terms = _reference_terms(item)
+    return _dedupe_terms(terms)
+
+
+def _replace_prompt_terms(base_terms: list[str], main_terms: list[str], ref_terms: list[str]) -> tuple[str, list[str]]:
+    main_lookup = {_term_key(term) for term in main_terms}
+    output: list[str] = []
+    matched: list[str] = []
+    inserted = False
+    for term in base_terms:
+        if _term_key(term) in main_lookup:
+            matched.append(term)
+            if not inserted:
+                output.extend(ref_terms)
+                inserted = True
+            continue
+        output.append(term)
+    if not inserted:
+        output.extend(ref_terms)
+    return _join_terms(_dedupe_terms(output)), _dedupe_terms(matched)
+
+
+def _replace_prompt_terms_for_patches(base_terms: list[str], patches: list[dict[str, Any]]) -> tuple[str, dict[str, list[str]]]:
+    current = list(base_terms)
+    matched_by_role: dict[str, list[str]] = {}
+    for patch in patches:
+        positive, matched = _replace_prompt_terms(current, patch["main_terms"], patch["terms"])
+        current = _split_prompt_terms(positive)
+        matched_by_role[patch["role"]] = matched
+    return _join_terms(current), matched_by_role
+
+
+def _field_role(field: str) -> str:
+    return {
+        "subject": "subject",
+        "composition": "composition",
+        "color_palette": "color",
+        "mood": "mood",
+        "style_booster": "style",
+    }.get(field, field)
+
+
+def _field_label(field: str) -> str:
+    return {
+        "subject": "Subject reference variant",
+        "composition": "Composition reference variant",
+        "color_palette": "Color reference variant",
+        "mood": "Mood reference variant",
+        "style_booster": "Style reference variant",
+    }.get(field, "Reference variant")
+
+
+def _split_prompt_terms(value: Any) -> list[str]:
+    text = _string(value)
+    if not text:
+        return []
+    separators = [",", "\n", ";", "\uff0c", "\u3001"]
+    for separator in separators[1:]:
+        text = text.replace(separator, separators[0])
+    return [" ".join(part.strip().split()) for part in text.split(",") if part.strip()]
+
+
+def _dedupe_terms(terms: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for term in terms:
+        key = _term_key(term)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(term)
+    return result
+
+
+def _term_key(term: Any) -> str:
+    return _normalize_term(term).replace("_", " ")
+
+
+def _join_terms(terms: list[str]) -> str:
+    return ", ".join(term for term in terms if term)
 
 
 def _compile_reference_terms(item: dict[str, Any], prompt_mode: str) -> dict[str, Any]:
@@ -375,6 +627,36 @@ def _reference_terms(item: dict[str, Any]) -> list[str]:
     return [term for term in dict.fromkeys(_normalize_term(term) for term in terms) if term]
 
 
+def _reference_by_usage(refs: list[dict[str, Any]], role: str) -> dict[str, Any] | None:
+    needles = {
+        "role": ("角色", "主体", "subject", "character"),
+        "composition": ("构图", "composition"),
+    }[role]
+    for ref in refs:
+        usage = _string(ref.get("usage")).lower()
+        if any(needle.lower() in usage for needle in needles):
+            return ref
+    if role == "role" and refs:
+        return refs[0]
+    if role == "composition" and len(refs) > 1:
+        return refs[1]
+    return None
+
+
+def _reference_field_terms(item: dict[str, Any], key: str) -> list[str]:
+    visual = item.get("visual_structure") if isinstance(item.get("visual_structure"), dict) else {}
+    return list(dict.fromkeys(_split_terms(visual.get(key))))
+
+
+def _join_prompt_parts(base: str, *term_groups: list[str]) -> str:
+    parts = [_string(base).strip()]
+    for terms in term_groups:
+        text = ", ".join(term for term in terms if term)
+        if text:
+            parts.append(text)
+    return ", ".join(part for part in parts if part)
+
+
 def _lora_combos(loras_raw: Any) -> list[dict[str, Any]]:
     loras = []
     for item in loras_raw if isinstance(loras_raw, list) else []:
@@ -382,7 +664,7 @@ def _lora_combos(loras_raw: Any) -> list[dict[str, Any]]:
         if name:
             loras.append({"name": name, "notes": _string(item.get("notes")), "trigger_words": _string_list(item.get("trigger_words"))})
 
-    combos = [{"id": "baseline_no_lora", "label": "No LoRA", "loras": []}]
+    combos = [{"id": "baseline_no_lora", "label": "No test LoRA", "loras": []}]
     for lora in loras:
         combos.append({"id": "single_" + _slug(lora["name"]), "label": lora["name"], "loras": [lora]})
     for left, right in itertools.combinations(loras, 2):
@@ -395,6 +677,44 @@ def _lora_combos(loras_raw: Any) -> list[dict[str, Any]]:
             }
         )
     return combos
+
+
+def _fixed_loras(raw: Any) -> list[dict[str, Any]]:
+    values: list[dict[str, Any]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = _string(item.get("name")).strip()
+        if not name:
+            continue
+        strength = _float(item.get("strength"), 1.0)
+        applies_to = _string_list(item.get("applies_to")) or ["role", "role+composition"]
+        values.append(
+            {
+                "name": name,
+                "strength": strength,
+                "clipStrength": _float(item.get("clipStrength"), strength),
+                "active": bool(item.get("active", True)),
+                "role": _string(item.get("role") or "fixed"),
+                "applies_to": applies_to,
+            }
+        )
+    return values
+
+
+def _fixed_loras_for_variant(loras: list[dict[str, Any]], variant: dict[str, Any]) -> list[dict[str, Any]]:
+    patch = variant.get("reference_patch") if isinstance(variant.get("reference_patch"), dict) else {}
+    role = _string(patch.get("role"))
+    aliases = {
+        "subject": {"subject", "role"},
+        "subject+composition": {"subject+composition", "role+composition"},
+    }.get(role, {role})
+    selected: list[dict[str, Any]] = []
+    for lora in loras:
+        applies_to = lora.get("applies_to") if isinstance(lora.get("applies_to"), list) else []
+        if aliases.intersection(set(applies_to)):
+            selected.append({key: value for key, value in lora.items() if key != "applies_to"})
+    return selected
 
 
 def _strengths(loras_raw: Any) -> list[float]:
@@ -418,20 +738,140 @@ def _seeds(raw: Any) -> list[int]:
     return values or [-1]
 
 
-def _generation(raw: Any) -> dict[str, Any]:
+def _generation(raw: Any, source_generation: dict[str, Any] | None = None) -> dict[str, Any]:
     source = raw if isinstance(raw, dict) else {}
-    return {
+    generation = {
         "checkpoint": _string(source.get("checkpoint")).strip(),
         "steps": _int(source.get("steps"), 22),
         "cfg": _float(source.get("cfg"), 6),
-        "sampler": _string(source.get("sampler") or "euler_ancestral"),
-        "scheduler": _string(source.get("scheduler") or "normal"),
+        "sampler": _normalize_sampler(_string(source.get("sampler") or "euler_ancestral")),
+        "scheduler": _normalize_scheduler(_string(source.get("scheduler") or "normal")),
         "denoise": _float(source.get("denoise"), 1),
         "width": _int(source.get("width"), 832),
         "height": _int(source.get("height"), 1216),
         "clip_skip": _int(source.get("clip_skip"), 2),
         "batch_size": _int(source.get("batch_size"), 1),
     }
+    policy = source.get("source_artwork") if isinstance(source.get("source_artwork"), dict) else {}
+    if policy.get("enabled") and source_generation:
+        fields = policy.get("apply_fields") if isinstance(policy.get("apply_fields"), list) else []
+        workflow_fields = source_generation.get("workflow_fields") if isinstance(source_generation.get("workflow_fields"), dict) else {}
+        for field in fields:
+            if field not in workflow_fields:
+                continue
+            value = workflow_fields[field]
+            if field == "sampler":
+                generation[field] = _normalize_sampler(_string(value))
+            elif field == "scheduler":
+                generation[field] = _normalize_scheduler(_string(value))
+            elif field in {"steps", "width", "height", "clip_skip", "batch_size"}:
+                generation[field] = _int(value, generation[field])
+            elif field in {"cfg", "denoise"}:
+                generation[field] = _float(value, generation[field])
+    return generation
+
+
+def _source_generation(recipe_ref: Any, artwork: dict[str, Any]) -> dict[str, Any] | None:
+    recipe_source = recipe_ref.get("source_generation") if isinstance(recipe_ref, dict) else None
+    if isinstance(recipe_source, dict) and recipe_source.get("workflow_fields"):
+        return {
+            "source": _string(recipe_source.get("source") or artwork.get("source")),
+            "source_url": _string(recipe_source.get("source_url") or artwork.get("source_url")),
+            "civitai_meta_id": recipe_source.get("civitai_meta_id"),
+            "workflow_fields": _normalize_source_workflow_fields(recipe_source.get("workflow_fields")),
+            "carry_fields": _clean_dict(recipe_source.get("carry_fields") if isinstance(recipe_source.get("carry_fields"), dict) else {}),
+            "raw_generation": recipe_source.get("raw_generation") if isinstance(recipe_source.get("raw_generation"), dict) else {},
+        }
+
+    seed = artwork.get("aigc_seed") if isinstance(artwork.get("aigc_seed"), dict) else {}
+    meta = artwork.get("meta") if isinstance(artwork.get("meta"), dict) else {}
+    generation = seed or (meta.get("generation") if isinstance(meta.get("generation"), dict) else {})
+    if not generation:
+        return None
+    workflow_fields = _normalize_source_workflow_fields(
+        {
+            "steps": generation.get("steps") or meta.get("steps"),
+            "cfg": generation.get("cfg_scale") or meta.get("cfgScale"),
+            "sampler": generation.get("sampler") or meta.get("sampler"),
+            "scheduler": generation.get("schedule_type") or generation.get("scheduler") or meta.get("Schedule type"),
+            "seed": generation.get("seed") or meta.get("seed"),
+            "clip_skip": generation.get("clip_skip") or meta.get("clipSkip"),
+            "width": generation.get("width") or meta.get("width"),
+            "height": generation.get("height") or meta.get("height"),
+            "denoise": generation.get("denoising_strength") or meta.get("Denoising strength"),
+        }
+    )
+    carry_fields = _clean_dict(
+        {
+            "model": generation.get("model") or meta.get("Model"),
+            "model_hash": generation.get("model_hash") or meta.get("Model hash"),
+            "hires_steps": generation.get("hires_steps") or meta.get("Hires steps"),
+            "hires_upscale": generation.get("hires_upscale") or meta.get("Hires upscale"),
+            "hires_upscaler": generation.get("hires_upscaler") or meta.get("Hires upscaler"),
+            "hires_cfg": generation.get("hires_cfg_scale") or meta.get("Hires CFG Scale"),
+            "token_merge": generation.get("token_merging_ratio") or meta.get("Token merging ratio"),
+            "token_merge_hr": generation.get("token_merging_ratio_hr") or meta.get("Token merging ratio hr"),
+        }
+    )
+    return {
+        "source": _string(artwork.get("source")),
+        "source_url": _string(artwork.get("source_url")),
+        "civitai_meta_id": meta.get("civitai_meta_id"),
+        "workflow_fields": workflow_fields,
+        "carry_fields": carry_fields,
+        "raw_generation": meta.get("raw_generation") if isinstance(meta.get("raw_generation"), dict) else generation,
+    }
+
+
+def _normalize_source_workflow_fields(source: Any) -> dict[str, Any]:
+    fields = source if isinstance(source, dict) else {}
+    sampler = _string(fields.get("sampler")).strip()
+    scheduler = _string(fields.get("scheduler")).strip()
+    return _clean_dict(
+        {
+            "steps": _int(fields.get("steps"), None),
+            "cfg": _float(fields.get("cfg"), None),
+            "sampler": _normalize_sampler(sampler) if sampler else None,
+            "scheduler": _normalize_scheduler(scheduler) if scheduler else None,
+            "seed": _int(fields.get("seed"), None),
+            "clip_skip": _int(fields.get("clip_skip"), None),
+            "width": _int(fields.get("width"), None),
+            "height": _int(fields.get("height"), None),
+            "denoise": _float(fields.get("denoise"), None),
+        }
+    )
+
+
+def _source_generation_workflow_support(source_generation: dict[str, Any] | None) -> dict[str, Any]:
+    if not source_generation:
+        return {"supported_fields": [], "carry_only_fields": [], "unsupported_fields": []}
+    workflow_fields = source_generation.get("workflow_fields") if isinstance(source_generation.get("workflow_fields"), dict) else {}
+    carry_fields = source_generation.get("carry_fields") if isinstance(source_generation.get("carry_fields"), dict) else {}
+    return {
+        "supported_fields": sorted(workflow_fields.keys()),
+        "carry_only_fields": sorted(carry_fields.keys()),
+        "unsupported_fields": sorted(carry_fields.keys()),
+    }
+
+
+def _normalize_sampler(value: str) -> str:
+    normalized = value.strip().lower().replace(" ", "_").replace("-", "_")
+    return {
+        "euler_a": "euler_ancestral",
+        "euler_ancestral": "euler_ancestral",
+    }.get(normalized, normalized or "euler_ancestral")
+
+
+def _normalize_scheduler(value: str) -> str:
+    normalized = value.strip().lower().replace(" ", "_").replace("-", "_")
+    return {
+        "karras": "karras",
+        "schedule_type_karras": "karras",
+    }.get(normalized, normalized or "normal")
+
+
+def _clean_dict(source: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in source.items() if value not in ("", None)}
 
 
 def _initial_submissions(preview: dict[str, Any]) -> list[dict[str, Any]]:
@@ -639,7 +1079,10 @@ def _artwork_from_ref(ref: Any) -> dict[str, Any] | None:
     if not isinstance(ref, dict):
         return None
     artwork_id = _string(ref.get("id")).strip()
-    return get_artwork(artwork_id) if artwork_id else None
+    artwork = get_artwork(artwork_id) if artwork_id else None
+    if artwork:
+        artwork = {**artwork, "usage": ref.get("usage", artwork.get("usage", ""))}
+    return artwork
 
 
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:

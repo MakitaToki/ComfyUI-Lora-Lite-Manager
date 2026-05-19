@@ -810,6 +810,7 @@ function buildRecipe() {
             source_url: item.source_url || "",
             download_url: item.download_url || "",
         })),
+        fixed_loras: fixedLorasForRecipe(),
         seeds: parseNumberList(els.seedsInput.value).map((value) => Math.trunc(value)),
         prompt_mode: els.promptModeInput.value,
         generation: {
@@ -817,6 +818,12 @@ function buildRecipe() {
             steps: Number(els.stepsInput.value) || 22,
             width: Number(els.widthInput.value) || 832,
             height: Number(els.heightInput.value) || 1216,
+            source_artwork: {
+                enabled: true,
+                artwork_id: state.main?.id || "",
+                apply_fields: ["cfg", "sampler", "scheduler", "clip_skip", "denoise"],
+                carry_fields: ["seed", "steps", "width", "height", "model", "model_hash", "hires", "token_merge"],
+            },
         },
         prompt_policy: {
             main_artwork: "使用主素材的正向/负向提示词",
@@ -871,15 +878,53 @@ function loraLinks(item) {
     };
 }
 
+function fixedLorasForRecipe() {
+    const denia = state.loraItems.find((item) => {
+        const metadata = item.metadata || {};
+        const civitai = item.civitai || metadata.civitai || {};
+        const modelId = String(civitai.modelId || civitai.model?.id || metadata.model_id || "");
+        const text = [
+            item.name,
+            item.file_name,
+            item.relative_path,
+            metadata.name,
+            civitai.model?.name,
+        ].join(" ").toLowerCase();
+        return modelId === "2488372" || text.includes("denia") || text.includes("dania");
+    });
+    if (!denia) {
+        return [];
+    }
+    return [
+        {
+            name: denia.file_name || denia.name,
+            strength: 1.0,
+            clipStrength: 1.0,
+            role: "fixed_role_lora",
+            applies_to: ["role", "subject", "subject+composition", "role+composition"],
+            source_url: loraLinks(denia).modelPage || "https://civitai.com/models/2488372/denia-or-wuthering-waves",
+        },
+    ];
+}
+
 function artworkRef(item) {
-    return {
+    const ref = {
         id: item.id,
         title: titleOf(item),
         source: item.source,
         source_url: item.source_url,
         asset_type: item.asset_type,
         prompt_state: isDirectlyGeneratable(item) ? "可直接生成" : "需要整理提示词",
+        prompts: {
+            positive: String(item.positive_prompt || item.meta?.prompt || "").trim(),
+            negative: String(item.negative_prompt || item.meta?.negativePrompt || "").trim(),
+        },
     };
+    const sourceGeneration = artworkSourceGeneration(item);
+    if (sourceGeneration) {
+        ref.source_generation = sourceGeneration;
+    }
+    return ref;
 }
 
 function artworkSlotHtml(item, badge, removable) {
@@ -888,12 +933,49 @@ function artworkSlotHtml(item, badge, removable) {
         <div class="slot-text">
             <span>${escapeHtml(badge)} · ${isDirectlyGeneratable(item) ? "可直接生成" : "需要整理"}</span>
             <strong>${escapeHtml(titleOf(item))}</strong>
-            <p>${escapeHtml(descriptionOf(item))}</p>
+            ${badge === "主素材" ? "" : `<p>${escapeHtml(descriptionOf(item))}</p>`}
             ${promptSummaryHtml(item)}
             ${referenceSummaryHtml(item)}
         </div>
         ${removable ? '<button class="icon-button" type="button" aria-label="移除">x</button>' : ""}
     `;
+}
+
+function artworkSourceGeneration(item) {
+    const generation = item.aigc_seed || item.meta?.generation || {};
+    const raw = item.meta?.raw_generation || item.meta?.generation || generation;
+    if (!generation || !Object.keys(generation).length) {
+        return null;
+    }
+    const workflowFields = pruneEmpty({
+        steps: intValue(generation.steps ?? item.meta?.steps),
+        cfg: numberValue(generation.cfg_scale ?? item.meta?.cfgScale),
+        sampler: stringValue(generation.sampler ?? item.meta?.sampler),
+        scheduler: stringValue(generation.schedule_type ?? generation.scheduler ?? item.meta?.["Schedule type"]),
+        seed: intValue(generation.seed ?? item.meta?.seed),
+        clip_skip: intValue(generation.clip_skip ?? item.meta?.clipSkip),
+        width: intValue(generation.width ?? item.meta?.width),
+        height: intValue(generation.height ?? item.meta?.height),
+        denoise: numberValue(generation.denoising_strength ?? item.meta?.["Denoising strength"]),
+    });
+    const carryFields = pruneEmpty({
+        model: stringValue(generation.model ?? item.meta?.Model),
+        model_hash: stringValue(generation.model_hash ?? item.meta?.["Model hash"]),
+        hires_steps: intValue(generation.hires_steps ?? item.meta?.["Hires steps"]),
+        hires_upscale: numberValue(generation.hires_upscale ?? item.meta?.["Hires upscale"]),
+        hires_upscaler: stringValue(generation.hires_upscaler ?? item.meta?.["Hires upscaler"]),
+        hires_cfg: numberValue(generation.hires_cfg_scale ?? item.meta?.["Hires CFG Scale"]),
+        token_merge: numberValue(generation.token_merging_ratio ?? item.meta?.["Token merging ratio"]),
+        token_merge_hr: numberValue(generation.token_merging_ratio_hr ?? item.meta?.["Token merging ratio hr"]),
+    });
+    return {
+        source: item.source || "",
+        source_url: item.source_url || "",
+        civitai_meta_id: item.meta?.civitai_meta_id || null,
+        workflow_fields: workflowFields,
+        carry_fields: carryFields,
+        raw_generation: raw || {},
+    };
 }
 
 function isDirectlyGeneratable(item) {
@@ -1009,6 +1091,24 @@ function parseNumberList(value) {
 
 function compact(value) {
     return String(value || "").replace(/\s+/g, " ").slice(0, 140);
+}
+
+function pruneEmpty(value) {
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== "" && item !== null && item !== undefined));
+}
+
+function stringValue(value) {
+    return String(value ?? "").trim();
+}
+
+function numberValue(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+function intValue(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.trunc(number) : null;
 }
 
 function textEl(tag, text) {

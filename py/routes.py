@@ -194,15 +194,17 @@ async def delete_lora(request: web.Request) -> web.Response:
 async def download_lora(request: web.Request) -> web.Response:
     payload = await _read_json(request)
     model_version_id = payload.get("model_version_id")
-    if model_version_id is None:
-        return web.json_response({"success": False, "error": "model_version_id is required"}, status=400)
+    model_id = payload.get("model_id")
+    if model_version_id is None and model_id is None:
+        return web.json_response({"success": False, "error": "model_version_id or model_id is required"}, status=400)
 
     save_root = str(payload.get("save_root") or get_default_lora_root())
     if not save_root:
         return web.json_response({"success": False, "error": "No LoRA root is configured"}, status=400)
 
     try:
-        version = await CivitaiClient().get_model_version(int(model_version_id))
+        client = CivitaiClient()
+        version = await _download_version_from_payload(client, payload)
         file_info = select_model_file(version, payload.get("file_params"))
         if not file_info:
             return web.json_response({"success": False, "error": "No downloadable model file found"}, status=404)
@@ -227,6 +229,27 @@ async def download_lora(request: web.Request) -> web.Response:
         )
     except Exception as exc:
         return web.json_response({"success": False, "error": str(exc)}, status=502)
+
+
+async def _download_version_from_payload(client: CivitaiClient, payload: dict[str, Any]) -> dict[str, Any]:
+    model_version_id = payload.get("model_version_id")
+    if model_version_id is not None:
+        return await client.get_model_version(int(model_version_id))
+
+    model_id = int(payload.get("model_id"))
+    model = await client.get_model(model_id)
+    versions = model.get("modelVersions")
+    if not isinstance(versions, list) or not versions:
+        raise ValueError(f"No model versions found for Civitai model {model_id}.")
+    preferred_base = str(payload.get("preferred_base_model") or "").lower()
+    candidates = [version for version in versions if isinstance(version, dict)]
+    if preferred_base:
+        matched = [version for version in candidates if preferred_base in str(version.get("baseModel") or "").lower()]
+        if matched:
+            candidates = matched
+    published = [version for version in candidates if str(version.get("status") or "").lower() in {"published", ""}]
+    candidates = published or candidates
+    return candidates[0]
 
 
 async def _read_json(request: web.Request) -> dict[str, Any]:

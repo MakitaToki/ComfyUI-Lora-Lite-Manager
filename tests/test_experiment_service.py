@@ -49,6 +49,41 @@ def test_pair_combo_uses_synchronized_strength(monkeypatch):
     assert [lora["clipStrength"] for lora in pair_case["models"]["loras"]] == [0.8, 0.8]
 
 
+def test_prompt_variant_replaces_main_red_box_terms_by_reference_usage(monkeypatch):
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+
+    preview = service.build_experiment_preview(
+        {
+            "main_artwork": {"id": "graffiti_keqing"},
+            "visual_references": [
+                {"id": "ref_character", "usage": "参考角色/主体"},
+                {"id": "ref_composition", "usage": "参考构图"},
+            ],
+            "lora_matrix": [{"name": "a.safetensors", "strengths": [0.6]}],
+            "seeds": [123],
+        }
+    )
+
+    role_variant = next(item for item in preview["prompt_variants"] if item["reference_patch"]["role"] == "subject")
+    composition_variant = next(item for item in preview["prompt_variants"] if item["reference_patch"]["role"] == "composition")
+    combined_variant = next(item for item in preview["prompt_variants"] if item["reference_patch"]["role"] == "subject+composition")
+
+    assert "silver hair idol" in role_variant["positive"]
+    assert "exposed shoulders" not in role_variant["positive"]
+    assert "detailed jewelry" not in role_variant["positive"]
+    assert role_variant["reference_patch"]["matched_terms"] == ["detailed jewelry", "exposed shoulders"]
+
+    assert "low angle rooftop view" in composition_variant["positive"]
+    assert "graffiti brick wall background" not in composition_variant["positive"]
+    assert "half body portrait" not in composition_variant["positive"]
+    assert "center composition" not in composition_variant["positive"]
+
+    assert "silver hair idol" in combined_variant["positive"]
+    assert "low angle rooftop view" in combined_variant["positive"]
+    assert "exposed shoulders" not in combined_variant["positive"]
+    assert "center composition" not in combined_variant["positive"]
+
+
 def test_danbooru_prompt_keeps_unmatched_terms(monkeypatch):
     monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
     monkeypatch.setattr(service, "_canonical_tag", lambda term: "1girl" if term == "girl" else "")
@@ -266,6 +301,54 @@ def test_workflow_patch_receives_multiple_loras(monkeypatch):
 
 
 def _fake_get_artwork(artwork_id: str):
+    graffiti_items = {
+        "graffiti_keqing": {
+            "id": "graffiti_keqing",
+            "positive_prompt": (
+                "detailed jewelry, exposed shoulders, graffiti brick wall background, street fashion, urban style, "
+                "cyberpunk aesthetic, vibrant colors, digital art, half body portrait, center composition"
+            ),
+            "negative_prompt": "",
+            "raw_tags": [],
+            "retrieval": {},
+            "visual_structure": {
+                "subject": "anime girl, cat ears, keqing genshin impact, detailed jewelry, exposed shoulders",
+                "composition": "graffiti brick wall background, half body portrait, center composition, neon graffiti",
+                "color_palette": "vibrant colors",
+                "mood": "street fashion, urban style, cyberpunk aesthetic, digital art, sweet cool style, night city vibes",
+                "style_booster": "sweet cool style, night city vibes, high contrast lighting",
+            },
+            "design_language": {},
+            "meta": {"title": "Street graffiti Keqing"},
+        },
+        "ref_character": {
+            "id": "ref_character",
+            "positive_prompt": "",
+            "negative_prompt": "",
+            "raw_tags": [],
+            "retrieval": {},
+            "visual_structure": {
+                "subject": "silver hair idol, blue stage dress, moon hair ornament",
+            },
+            "design_language": {},
+            "meta": {"title": "Character Reference"},
+        },
+        "ref_composition": {
+            "id": "ref_composition",
+            "positive_prompt": "",
+            "negative_prompt": "",
+            "raw_tags": [],
+            "retrieval": {},
+            "visual_structure": {
+                "composition": "low angle rooftop view, diagonal composition, wide city skyline",
+            },
+            "design_language": {},
+            "meta": {"title": "Composition Reference"},
+        },
+    }
+    if artwork_id in graffiti_items:
+        return graffiti_items[artwork_id]
+
     items = {
         "main": {
             "id": "main",

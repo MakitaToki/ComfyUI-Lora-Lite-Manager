@@ -64,14 +64,16 @@ export async function deleteLora(filePath) {
     }));
 }
 
-export async function downloadLora({ modelVersionId, saveRoot, relativeDir }) {
+export async function downloadLora({ modelVersionId, modelId, saveRoot, relativeDir, preferredBaseModel = "" }) {
     return readJson(await fetch(`${BASE}/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             model_version_id: modelVersionId,
+            model_id: modelId,
             save_root: saveRoot,
             relative_dir: relativeDir,
+            preferred_base_model: preferredBaseModel,
         }),
     }));
 }

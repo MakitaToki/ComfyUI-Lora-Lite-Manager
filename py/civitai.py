@@ -44,6 +44,12 @@ class CivitaiClient:
             use_auth=True,
         )
 
+    async def get_model(self, model_id: int) -> dict[str, Any]:
+        return await self.downloader.request_json(
+            f"{CIVITAI_API}/models/{model_id}",
+            use_auth=True,
+        )
+
     async def get_model_by_hash(self, sha256: str) -> dict[str, Any]:
         return await self.downloader.request_json(
             f"{CIVITAI_API}/model-versions/by-hash/{sha256}",

@@ -372,17 +372,20 @@ async function saveAndRefresh(metadata, message) {
 function parseVersionId(value) {
     const text = value.trim();
     if (/^\d+$/.test(text)) {
-        return Number(text);
+        return { modelVersionId: Number(text), modelId: null };
     }
     try {
         const url = new URL(text);
         const explicit = url.searchParams.get("modelVersionId");
         if (explicit && /^\d+$/.test(explicit)) {
-            return Number(explicit);
+            return { modelVersionId: Number(explicit), modelId: null };
         }
         const downloadMatch = url.pathname.match(/\/models\/(\d+)/);
         if (url.pathname.includes("/api/download/models/") && downloadMatch) {
-            return Number(downloadMatch[1]);
+            return { modelVersionId: Number(downloadMatch[1]), modelId: null };
+        }
+        if (downloadMatch) {
+            return { modelVersionId: null, modelId: Number(downloadMatch[1]) };
         }
     } catch {
         return null;
@@ -392,8 +395,8 @@ function parseVersionId(value) {
 
 async function submitDownload(event) {
     event.preventDefault();
-    const modelVersionId = parseVersionId(els.downloadInput.value);
-    if (!modelVersionId) {
+    const parsed = parseVersionId(els.downloadInput.value);
+    if (!parsed) {
         toast("请输入 modelVersionId，或带 modelVersionId 参数的 Civitai 链接", "error");
         return;
     }
@@ -401,9 +404,11 @@ async function submitDownload(event) {
     setBusy(true, "正在下载 LoRA...");
     try {
         await downloadLora({
-            modelVersionId,
+            modelVersionId: parsed.modelVersionId,
+            modelId: parsed.modelId,
             saveRoot: els.downloadRoot.value,
             relativeDir: els.downloadSubdir.value.trim(),
+            preferredBaseModel: "Illustrious",
         });
         els.downloadDrawer.hidden = true;
         els.downloadInput.value = "";
