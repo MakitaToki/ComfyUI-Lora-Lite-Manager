@@ -113,11 +113,29 @@
                         <div class="param-grid">
                             <label><span>Checkpoint</span><input id="checkpointInput" value="fabricatedXL_v70.safetensors"></label>
                             <label><span>Steps</span><input id="stepsInput" type="number" min="1" value="22"></label>
+                            <label><span>Sampler</span><input id="samplerInput" value="euler_ancestral" list="samplerOptions"></label>
+                            <label><span>Scheduler</span><input id="schedulerInput" value="normal" list="schedulerOptions"></label>
                             <label><span>宽度</span><input id="widthInput" type="number" min="64" step="8" value="832"></label>
                             <label><span>高度</span><input id="heightInput" type="number" min="64" step="8" value="1216"></label>
                             <label class="full"><span>随机种子</span><input id="seedsInput" value="123456, 234567"></label>
                             <label class="full"><span>Prompt mode</span><select id="promptModeInput"><option value="danbooru">Danbooru tags</option><option value="natural">Natural language</option></select></label>
                         </div>
+                        <datalist id="samplerOptions">
+                            <option value="euler_ancestral"></option>
+                            <option value="euler"></option>
+                            <option value="dpmpp_2m"></option>
+                            <option value="dpmpp_2m_sde"></option>
+                            <option value="dpmpp_sde"></option>
+                            <option value="lcm"></option>
+                        </datalist>
+                        <datalist id="schedulerOptions">
+                            <option value="normal"></option>
+                            <option value="karras"></option>
+                            <option value="exponential"></option>
+                            <option value="sgm_uniform"></option>
+                            <option value="simple"></option>
+                            <option value="ddim_uniform"></option>
+                        </datalist>
                     </article>
                 </div>
             </section>

@@ -18,13 +18,22 @@ def test_preview_expands_baseline_single_and_pair_lora_combos(monkeypatch):
                 {"name": "c.safetensors", "strengths": [0.4, 0.6, 0.8]},
             ],
             "seeds": [123, 456],
-            "generation": {"checkpoint": "model.safetensors", "steps": 22, "width": 832, "height": 1216},
+            "generation": {
+                "checkpoint": "model.safetensors",
+                "steps": 22,
+                "sampler": "dpmpp_2m",
+                "scheduler": "karras",
+                "width": 832,
+                "height": 1216,
+            },
         }
     )
 
     assert len(preview["prompt_variants"]) == 3
     assert len(preview["lora_combos"]) == 7
     assert preview["summary"]["total"] == 3 * 7 * 3 * 2
+    assert preview["cases"][0]["generation"]["sampler"] == "dpmpp_2m"
+    assert preview["cases"][0]["generation"]["scheduler"] == "karras"
     assert preview["lora_combos"][0]["id"] == "baseline_no_lora"
     assert any(combo["label"] == "a.safetensors + b.safetensors" for combo in preview["lora_combos"])
 

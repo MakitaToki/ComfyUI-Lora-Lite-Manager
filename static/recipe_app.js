@@ -33,6 +33,8 @@ const els = {
     loraStrengthInput: document.querySelector("#loraStrengthInput"),
     checkpointInput: document.querySelector("#checkpointInput"),
     stepsInput: document.querySelector("#stepsInput"),
+    samplerInput: document.querySelector("#samplerInput"),
+    schedulerInput: document.querySelector("#schedulerInput"),
     widthInput: document.querySelector("#widthInput"),
     heightInput: document.querySelector("#heightInput"),
     seedsInput: document.querySelector("#seedsInput"),
@@ -89,7 +91,7 @@ function bindEvents() {
     });
     els.pickerGrid.addEventListener("wheel", stopScrollBleed, { passive: false });
     els.loraForm.addEventListener("submit", addLora);
-    for (const input of [els.checkpointInput, els.stepsInput, els.widthInput, els.heightInput, els.seedsInput, els.promptModeInput]) {
+    for (const input of [els.checkpointInput, els.stepsInput, els.samplerInput, els.schedulerInput, els.widthInput, els.heightInput, els.seedsInput, els.promptModeInput]) {
         input.addEventListener("input", renderPreview);
     }
     els.promptModeInput.addEventListener("change", renderPreview);
@@ -174,6 +176,8 @@ function applyRecipe(recipe) {
     const generation = recipe.generation || {};
     els.checkpointInput.value = generation.checkpoint || "";
     els.stepsInput.value = generation.steps || 22;
+    els.samplerInput.value = generation.sampler || "euler_ancestral";
+    els.schedulerInput.value = generation.scheduler || "normal";
     els.widthInput.value = generation.width || 832;
     els.heightInput.value = generation.height || 1216;
     els.seedsInput.value = (Array.isArray(recipe.seeds) ? recipe.seeds : []).join(", ") || "123456, 234567";
@@ -458,6 +462,7 @@ function renderPreview() {
         strengths: strengthCount,
         seeds: seedCount,
         checkpoint: recipe.generation.checkpoint || "-",
+        sampler: samplerSummary(recipe.generation.sampler, recipe.generation.scheduler),
         size: `${recipe.generation.width} × ${recipe.generation.height}`,
     });
     if (state.jsonExpanded) {
@@ -530,6 +535,7 @@ function renderExperimentPreview(preview) {
         strengths: preview.strengths?.length || 0,
         seeds: preview.seeds?.length || 0,
         checkpoint: preview.cases?.[0]?.models?.checkpoint || els.checkpointInput.value.trim() || "-",
+        sampler: preview.cases?.[0]?.generation ? samplerSummary(preview.cases[0].generation.sampler, preview.cases[0].generation.scheduler) : samplerSummary(els.samplerInput.value, els.schedulerInput.value),
         size: preview.cases?.[0]?.generation ? `${preview.cases[0].generation.width} × ${preview.cases[0].generation.height}` : `${els.widthInput.value} × ${els.heightInput.value}`,
         warning: summary.warning,
     });
@@ -538,6 +544,7 @@ function renderExperimentPreview(preview) {
 function renderSummaryCards(summary) {
     els.experimentPreviewSummary.hidden = false;
     const checkpoint = summary.checkpoint || "-";
+    const sampler = summary.sampler || "-";
     const size = summary.size || "-";
     els.experimentPreviewSummary.innerHTML = `
         <div class="summary-card"><strong>${summary.total || 0}</strong><span>images</span></div>
@@ -546,9 +553,19 @@ function renderSummaryCards(summary) {
         <div class="summary-card"><strong>${summary.strengths || 0}</strong><span>strengths</span></div>
         <div class="summary-card"><strong>${summary.seeds || 0}</strong><span>seeds</span></div>
         <div class="summary-card summary-card-wide" title="${escapeAttr(checkpoint)}"><strong>${escapeHtml(checkpoint)}</strong><span>checkpoint</span></div>
+        <div class="summary-card summary-card-wide" title="${escapeAttr(sampler)}"><strong>${escapeHtml(sampler)}</strong><span>sampler</span></div>
         <div class="summary-card summary-card-size"><strong>${escapeHtml(size)}</strong><span>size</span></div>
         ${summary.warning ? `<p>${escapeHtml(summary.warning)}</p>` : ""}
     `;
+}
+
+function samplerSummary(sampler, scheduler) {
+    const samplerText = String(sampler || "").trim();
+    const schedulerText = String(scheduler || "").trim();
+    if (samplerText && schedulerText) {
+        return `${samplerText} / ${schedulerText}`;
+    }
+    return samplerText || schedulerText || "-";
 }
 
 function toggleJsonPreview() {
@@ -816,12 +833,14 @@ function buildRecipe() {
         generation: {
             checkpoint: els.checkpointInput.value.trim(),
             steps: Number(els.stepsInput.value) || 22,
+            sampler: els.samplerInput.value.trim() || "euler_ancestral",
+            scheduler: els.schedulerInput.value.trim() || "normal",
             width: Number(els.widthInput.value) || 832,
             height: Number(els.heightInput.value) || 1216,
             source_artwork: {
                 enabled: true,
                 artwork_id: state.main?.id || "",
-                apply_fields: ["cfg", "sampler", "scheduler", "clip_skip", "denoise"],
+                apply_fields: ["cfg", "clip_skip", "denoise"],
                 carry_fields: ["seed", "steps", "width", "height", "model", "model_hash", "hires", "token_merge"],
             },
         },
@@ -933,7 +952,6 @@ function artworkSlotHtml(item, badge, removable) {
         <div class="slot-text">
             <span>${escapeHtml(badge)} · ${isDirectlyGeneratable(item) ? "可直接生成" : "需要整理"}</span>
             <strong>${escapeHtml(titleOf(item))}</strong>
-            ${badge === "主素材" ? "" : `<p>${escapeHtml(descriptionOf(item))}</p>`}
             ${promptSummaryHtml(item)}
             ${referenceSummaryHtml(item)}
         </div>
