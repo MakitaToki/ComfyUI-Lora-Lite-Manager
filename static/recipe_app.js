@@ -143,6 +143,7 @@ async function loadLoras() {
     try {
         const result = await fetchLoras();
         state.loraItems = result.items || [];
+        renderPicker();
     } catch (error) {
         showToast(`LoRA 列表读取失败：${error.message}`, true);
     }
@@ -1007,7 +1008,7 @@ function artworkSourceGeneration(item) {
 }
 
 function isDirectlyGeneratable(item) {
-    return Boolean(String(item.positive_prompt || "").trim());
+    return Boolean(reusablePrompt(item));
 }
 
 function titleOf(item) {
@@ -1015,7 +1016,7 @@ function titleOf(item) {
 }
 
 function descriptionOf(item) {
-    return compact(item.positive_prompt || item.user_notes || referenceValue(item, "composition") || item.design_language?.layout || firstTag(item) || "没有描述");
+    return compact(reusablePrompt(item) || item.user_notes || referenceValue(item, "composition") || item.design_language?.layout || firstTag(item) || "没有描述");
 }
 
 function firstTag(item) {
@@ -1064,7 +1065,15 @@ function promptFields() {
 }
 
 function reusablePrompt(item) {
-    return String(item.positive_prompt || "").trim();
+    return firstText(
+        item.positive_prompt,
+        item.prompts?.positive,
+        item.prompt,
+        item.meta?.prompt,
+        item.meta?.Prompt,
+        item.meta?.positivePrompt,
+        item.meta?.["Positive prompt"],
+    );
 }
 
 function styleBooster(item) {
@@ -1119,6 +1128,16 @@ function parseNumberList(value) {
 
 function compact(value) {
     return String(value || "").replace(/\s+/g, " ").slice(0, 140);
+}
+
+function firstText(...values) {
+    for (const value of values) {
+        const text = String(value ?? "").trim();
+        if (text) {
+            return text;
+        }
+    }
+    return "";
 }
 
 function pruneEmpty(value) {
