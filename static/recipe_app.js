@@ -847,7 +847,7 @@ function buildRecipe() {
             source_artwork: {
                 enabled: true,
                 artwork_id: state.main?.id || "",
-                apply_fields: ["cfg", "clip_skip", "denoise"],
+                apply_fields: ["cfg", "clip_skip"],
                 carry_fields: ["seed", "steps", "width", "height", "model", "model_hash", "hires", "token_merge"],
             },
         },

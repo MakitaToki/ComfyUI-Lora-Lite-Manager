@@ -760,7 +760,7 @@ def _generation(raw: Any, source_generation: dict[str, Any] | None = None) -> di
                 generation[field] = _normalize_scheduler(_string(value))
             elif field in {"steps", "width", "height", "clip_skip", "batch_size"}:
                 generation[field] = _int(value, generation[field])
-            elif field in {"cfg", "denoise"}:
+            elif field == "cfg":
                 generation[field] = _float(value, generation[field])
     return generation
 

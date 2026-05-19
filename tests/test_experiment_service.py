@@ -58,6 +58,35 @@ def test_pair_combo_uses_synchronized_strength(monkeypatch):
     assert [lora["clipStrength"] for lora in pair_case["models"]["loras"]] == [1.0, 1.0]
 
 
+def test_source_denoise_is_not_applied_to_text_to_image_workflow(monkeypatch):
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+
+    preview = service.build_experiment_preview(
+        {
+            "main_artwork": {
+                "id": "main",
+                "source_generation": {
+                    "workflow_fields": {"cfg": 4.5, "clip_skip": 2, "denoise": 0.47},
+                },
+            },
+            "lora_matrix": [],
+            "seeds": [123],
+            "generation": {
+                "checkpoint": "model.safetensors",
+                "source_artwork": {
+                    "enabled": True,
+                    "apply_fields": ["cfg", "clip_skip", "denoise"],
+                },
+            },
+        }
+    )
+
+    generation = preview["cases"][0]["generation"]
+    assert generation["cfg"] == 4.5
+    assert generation["clip_skip"] == 2
+    assert generation["denoise"] == 1
+
+
 def test_prompt_variant_replaces_main_red_box_terms_by_reference_usage(monkeypatch):
     monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
 
