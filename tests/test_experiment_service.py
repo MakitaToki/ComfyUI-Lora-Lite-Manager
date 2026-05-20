@@ -87,6 +87,34 @@ def test_source_denoise_is_not_applied_to_text_to_image_workflow(monkeypatch):
     assert generation["denoise"] == 1
 
 
+def test_lora_trigger_words_are_appended_to_case_prompt(monkeypatch):
+    monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
+
+    preview = service.build_experiment_preview(
+        {
+            "main_artwork": {"id": "main"},
+            "lora_matrix": [
+                {"name": "Denia-10.safetensors", "trigger_words": ["Denia"]},
+            ],
+            "fixed_loras": [
+                {
+                    "name": "Denia-10.safetensors",
+                    "strength": 1.0,
+                    "clipStrength": 1.0,
+                    "applies_to": ["role", "subject"],
+                }
+            ],
+            "visual_references": [{"id": "ref1", "usage": "subject"}],
+            "seeds": [123],
+            "generation": {"checkpoint": "model.safetensors"},
+        }
+    )
+
+    case = next(item for item in preview["cases"] if item["lora_combo_id"] == "baseline_no_lora")
+    assert "Denia" in case["prompt"]["positive"]
+    assert case["models"]["loras"][0]["trigger_words"] == ["Denia"]
+
+
 def test_prompt_variant_replaces_main_red_box_terms_by_reference_usage(monkeypatch):
     monkeypatch.setattr(service, "get_artwork", _fake_get_artwork)
 
@@ -332,8 +360,8 @@ def test_workflow_patch_receives_multiple_loras(monkeypatch):
     workflow = service.patch_workflow(service.read_json(service.DEFAULT_WORKFLOW), pair_case)
 
     assert workflow["3"]["inputs"]["loras"]["__value__"] == [
-        {"name": "a.safetensors", "strength": 1.0, "clipStrength": 1.0, "active": True},
-        {"name": "b.safetensors", "strength": 1.0, "clipStrength": 1.0, "active": True},
+        {"name": "a.safetensors", "strength": 1.0, "clipStrength": 1.0, "active": True, "trigger_words": []},
+        {"name": "b.safetensors", "strength": 1.0, "clipStrength": 1.0, "active": True, "trigger_words": []},
     ]
     assert workflow["7"]["inputs"]["seed"] == 123
 

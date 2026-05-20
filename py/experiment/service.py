@@ -49,7 +49,7 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
     lora_combos = _lora_combos(recipe.get("lora_matrix", []))
     strengths = _strengths(recipe.get("lora_matrix", []))
     seeds = _seeds(recipe.get("seeds", []))
-    fixed_loras = _fixed_loras(recipe.get("fixed_loras", []))
+    fixed_loras = _fixed_loras(recipe.get("fixed_loras", []), trigger_lookup=_lora_trigger_lookup(recipe.get("lora_matrix", [])))
     source_generation = _source_generation(recipe.get("main_artwork"), main)
     generation = _generation(recipe.get("generation", {}), source_generation)
     workflow_support = _source_generation_workflow_support(source_generation)
@@ -64,9 +64,11 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
                 "clipStrength": strength,
                 "active": True,
                 "role": "test",
+                "trigger_words": lora.get("trigger_words", []),
             }
             for lora in combo["loras"]
         ]
+        positive = _positive_with_lora_triggers(variant["positive"], loras)
         case_id = _case_id(variant["id"], combo["id"], strength, seed)
         cases.append(
             {
@@ -81,9 +83,9 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
                 "seed": seed,
                 "source_artwork_ids": [main.get("id", "")],
                 "prompt": {
-                    "positive": variant["positive"],
+                    "positive": positive,
                     "negative": variant["negative"],
-                    "tags": variant["tags"],
+                    "tags": _split_terms(positive),
                     "unmatched_terms": variant["unmatched_terms"],
                     "mode": prompt_mode,
                 },
@@ -680,8 +682,21 @@ def _lora_combos(loras_raw: Any) -> list[dict[str, Any]]:
     return combos
 
 
-def _fixed_loras(raw: Any) -> list[dict[str, Any]]:
+def _lora_trigger_lookup(raw: Any) -> dict[str, list[str]]:
+    lookup: dict[str, list[str]] = {}
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = _string(item.get("name")).strip()
+        trigger_words = _string_list(item.get("trigger_words"))
+        if name and trigger_words:
+            lookup[name] = trigger_words
+    return lookup
+
+
+def _fixed_loras(raw: Any, *, trigger_lookup: dict[str, list[str]] | None = None) -> list[dict[str, Any]]:
     values: list[dict[str, Any]] = []
+    trigger_lookup = trigger_lookup or {}
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
             continue
@@ -690,6 +705,7 @@ def _fixed_loras(raw: Any) -> list[dict[str, Any]]:
             continue
         strength = _float(item.get("strength"), 1.0)
         applies_to = _string_list(item.get("applies_to")) or ["role", "role+composition"]
+        trigger_words = _string_list(item.get("trigger_words")) or trigger_lookup.get(name, [])
         values.append(
             {
                 "name": name,
@@ -698,6 +714,7 @@ def _fixed_loras(raw: Any) -> list[dict[str, Any]]:
                 "active": bool(item.get("active", True)),
                 "role": _string(item.get("role") or "fixed"),
                 "applies_to": applies_to,
+                "trigger_words": trigger_words,
             }
         )
     return values
@@ -716,6 +733,15 @@ def _fixed_loras_for_variant(loras: list[dict[str, Any]], variant: dict[str, Any
         if aliases.intersection(set(applies_to)):
             selected.append({key: value for key, value in lora.items() if key != "applies_to"})
     return selected
+
+
+def _positive_with_lora_triggers(positive: str, loras: list[dict[str, Any]]) -> str:
+    terms = _split_prompt_terms(positive)
+    for lora in loras:
+        if not lora.get("active", True):
+            continue
+        terms.extend(_string_list(lora.get("trigger_words")))
+    return _join_terms(_dedupe_terms(terms))
 
 
 def _strengths(loras_raw: Any) -> list[float]:
