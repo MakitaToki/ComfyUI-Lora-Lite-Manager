@@ -16,9 +16,7 @@ const state = {
     activeRunId: "",
     runPollTimer: 0,
     isPollingRun: false,
-    loras: [
-        { name: "Pvnk_styl2.safetensors", strengths: [FIXED_LORA_STRENGTH] },
-    ],
+    loras: [],
 };
 
 const els = {
@@ -909,32 +907,7 @@ function loraLinks(item) {
 }
 
 function fixedLorasForRecipe() {
-    const denia = state.loraItems.find((item) => {
-        const metadata = item.metadata || {};
-        const civitai = item.civitai || metadata.civitai || {};
-        const modelId = String(civitai.modelId || civitai.model?.id || metadata.model_id || "");
-        const text = [
-            item.name,
-            item.file_name,
-            item.relative_path,
-            metadata.name,
-            civitai.model?.name,
-        ].join(" ").toLowerCase();
-        return modelId === "2488372" || text.includes("denia") || text.includes("dania");
-    });
-    if (!denia) {
-        return [];
-    }
-    return [
-        {
-            name: denia.file_name || denia.name,
-            strength: 1.0,
-            clipStrength: 1.0,
-            role: "fixed_role_lora",
-            applies_to: ["role", "subject", "subject+composition", "role+composition"],
-            source_url: loraLinks(denia).modelPage || "https://civitai.com/models/2488372/denia-or-wuthering-waves",
-        },
-    ];
+    return [];
 }
 
 function artworkRef(item) {

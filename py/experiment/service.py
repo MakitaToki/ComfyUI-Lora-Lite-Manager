@@ -49,7 +49,11 @@ def build_experiment_preview(recipe: dict[str, Any]) -> dict[str, Any]:
     lora_combos = _lora_combos(recipe.get("lora_matrix", []))
     strengths = _strengths(recipe.get("lora_matrix", []))
     seeds = _seeds(recipe.get("seeds", []))
-    fixed_loras = _fixed_loras(recipe.get("fixed_loras", []), trigger_lookup=_lora_trigger_lookup(recipe.get("lora_matrix", [])))
+    fixed_loras = (
+        _fixed_loras(recipe.get("fixed_loras", []), trigger_lookup=_lora_trigger_lookup(recipe.get("lora_matrix", [])))
+        if recipe.get("enable_fixed_loras")
+        else []
+    )
     source_generation = _source_generation(recipe.get("main_artwork"), main)
     generation = _generation(recipe.get("generation", {}), source_generation)
     workflow_support = _source_generation_workflow_support(source_generation)

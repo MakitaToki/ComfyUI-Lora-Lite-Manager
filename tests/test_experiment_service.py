@@ -104,6 +104,7 @@ def test_lora_trigger_words_are_appended_to_case_prompt(monkeypatch):
                     "applies_to": ["role", "subject"],
                 }
             ],
+            "enable_fixed_loras": True,
             "visual_references": [{"id": "ref1", "usage": "subject"}],
             "seeds": [123],
             "generation": {"checkpoint": "model.safetensors"},
